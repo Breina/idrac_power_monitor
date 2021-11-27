@@ -4,15 +4,11 @@
   "config_flow": true,
   "documentation": "https://www.home-assistant.io/integrations/idrac_power",
   "requirements": [],
-  "ssdp": [],
-  "zeroconf": [],
-  "homekit": {},
   "dependencies": [],
   "codeowners": [
     "@Breina"
   ],
   "iot_class": "local_polling",
   "version": "1.0.0",
-  "issue_tracker": "https://github.com/Breina/idrac_power_monitor/issues",
-
+  "issue_tracker": "https://github.com/Breina/idrac_power_monitor/issues"
 }
