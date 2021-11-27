@@ -15,7 +15,7 @@ from .const import (
     DOMAIN,
     JSON_MODEL,
 )
-from .helpers import IdracRest
+from .idrac_rest import IdracRest
 
 _LOGGER = logging.getLogger(__name__)
 
