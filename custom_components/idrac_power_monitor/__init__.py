@@ -9,24 +9,15 @@ from homeassistant.core import HomeAssistant
 from .idrac_rest import IdracRest
 from .const import DOMAIN, DATA_IDRAC_REST_CLIENT
 
-PLATFORMS = ["sensor"]
-
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up the iDrac connection from a config entry."""
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
+    hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN][entry.entry_id] = entry.data
 
-    }
-
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
-        DATA_IDRAC_REST_CLIENT: IdracRest(
-            host=entry.data[CONF_HOST],
-            username=entry.data[CONF_USERNAME],
-            password=entry.data[CONF_PASSWORD]
-        )
-    }
-
-    hass.config_entries.async_setup_platforms(entry, PLATFORMS)
+    hass.async_create_task(
+        hass.config_entries.async_forward_entry_setup(entry, "sensor")
+    )
 
     return True
 

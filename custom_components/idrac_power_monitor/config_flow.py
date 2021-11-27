@@ -39,6 +39,7 @@ async def validate_input(data: dict[str, Any]) -> dict[str, Any]:
     return dict(model_name=model_name)
 
 
+@config_entries.HANDLERS.register(DOMAIN)
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for iDrac REST."""
 
@@ -85,9 +86,3 @@ class InvalidAuth(HomeAssistantError):
 
 class RedfishConfig(HomeAssistantError):
     """Error to indicate that Redfish was not properly configured"""
-
-    def __init__(self) -> None:
-        super().__init__(
-            'Start the iDRAC GUI with a web browser and traverse to the Network Service page - Server -> iDRAC '
-            'Settings -> Network -> Services -> Redfish. Verify that Enabled is selected.'
-        )
