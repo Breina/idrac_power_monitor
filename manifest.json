@@ -1,5 +1,5 @@
 {
-  "domain": "idrac_power",
+  "domain": "idrac_power_monitor",
   "name": "iDrac power monitor",
   "config_flow": true,
   "documentation": "https://www.home-assistant.io/integrations/idrac_power",
@@ -7,9 +7,9 @@
   "ssdp": [],
   "zeroconf": [],
   "homekit": {},
-  "dependencies": {},
+  "dependencies": [],
   "codeowners": [
-    "Breina"
+    "@Breina"
   ],
   "iot_class": "local_polling",
   "version": "1.0.0"

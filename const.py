@@ -8,7 +8,7 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
 )
 
-DOMAIN = 'idrac_power'
+DOMAIN = 'idrac_power_monitor'
 
 DATA_IDRAC_REST_CLIENT = 'client'
 
