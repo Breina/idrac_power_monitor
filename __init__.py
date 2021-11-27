@@ -6,7 +6,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_USERNAME, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
 
-from idrac_rest import IdracRest
+from helpers import IdracRest
 from .const import DOMAIN, DATA_IDRAC_REST_CLIENT
 
 PLATFORMS = ["sensor"]
