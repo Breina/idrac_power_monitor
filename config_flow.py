@@ -10,13 +10,12 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_USERNAME, CONF_PASSWORD
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
-from huawei_solar import ConnectionException
 
-from idrac_rest import IdracRest
 from .const import (
     DOMAIN,
     JSON_MODEL,
 )
+from .idrac_rest import IdracRest
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,12 +35,8 @@ async def validate_input(data: dict[str, Any]) -> dict[str, Any]:
         password=data[CONF_PASSWORD]
     )
 
-    try:
-        model_name = rest_client.get_device_info()[JSON_MODEL]
-        return dict(model_name=model_name)
-
-    except ConnectionException as ex:
-        raise CannotConnect from ex
+    model_name = rest_client.get_device_info()[JSON_MODEL]
+    return dict(model_name=model_name)
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
