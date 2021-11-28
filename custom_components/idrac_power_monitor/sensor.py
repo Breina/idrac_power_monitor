@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
+
 import backoff as backoff
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
@@ -44,19 +46,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     )
 
     async_add_entities([
-        IdracCurrentPowerSensor(rest_client, device_info, f"{serial}_{model}_current"),
-        IdracTotalPowerSensor(rest_client, device_info, f"{serial}_{model}_total")
+        IdracCurrentPowerSensor(rest_client, device_info, f"{serial}_{model}_current", model),
+        IdracTotalPowerSensor(rest_client, device_info, f"{serial}_{model}_total", model)
     ])
 
 
 class IdracCurrentPowerSensor(SensorEntity):
     """The iDrac's current power sensor entity."""
 
-    def __init__(self, rest: IdracRest, device_info, unique_id):
+    def __init__(self, rest: IdracRest, device_info, unique_id, model):
         self.rest = rest
 
         self.entity_description = CURRENT_POWER_SENSOR_DESCRIPTION
-        self.entity_description.name = rest.get_device_info()[JSON_MODEL] + self.entity_description.name
+        self.entity_description.name = model + self.entity_description.name
         self._attr_device_info = device_info
         self._attr_unique_id = unique_id
 
@@ -71,18 +73,25 @@ class IdracCurrentPowerSensor(SensorEntity):
 class IdracTotalPowerSensor(SensorEntity):
     """The iDrac's total power sensor entity."""
 
-    def __init__(self, rest: IdracRest, device_info, unique_id):
+    def __init__(self, rest: IdracRest, device_info, unique_id, model):
         self.rest = rest
 
         self.entity_description = TOTAL_POWER_SENSOR_DESCRIPTION
-        self.entity_description.name = rest.get_device_info()[JSON_MODEL] + self.entity_description.name
+        self.entity_description.name = model + self.entity_description.name
         self._attr_device_info = device_info
         self._attr_unique_id = unique_id
 
-        self._attr_native_value = 0
+        self.last_update = datetime.now()
+
+        self._attr_native_value = 0.0
 
     def update(self) -> None:
         """Get the latest data from the iDrac."""
 
-        self._attr_native_value += self.rest.get_power_usage()
+        now = datetime.now()
+        seconds_between = (now - self.last_update).total_seconds()
+        hours_between = seconds_between / 3600.0
 
+        self._attr_native_value += self.rest.get_power_usage() * hours_between
+
+        self.last_update = now
