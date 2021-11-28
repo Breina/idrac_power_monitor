@@ -7,9 +7,17 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from requests import RequestException
 
-from .idrac_rest import IdracRest
-from .const import (JSON_SERIAL_NUMBER, JSON_MODEL, DOMAIN,
+from const import (
+    JSON_MODEL, JSON_SERIAL_NUMBER
+)
+from .const import (DOMAIN,
                     SENSOR_DESCRIPTION, DATA_IDRAC_REST_CLIENT)
+from .idrac_rest import IdracRest
+
+protocol = 'https://'
+drac_managers = '/redfish/v1/Managers/iDRAC.Embedded.1'
+drac_chassis_path = '/redfish/v1/Chassis/System.Embedded.1'
+drac_powercontrol_path = '/redfish/v1/Chassis/System.Embedded.1/Power/PowerControl'
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
@@ -34,7 +42,6 @@ class IdracPowerSensor(SensorEntity):
     """The iDrac's power sensor entity."""
 
     def __init__(self, rest: IdracRest, device_info):
-        self._state = None
         self.rest = rest
 
         self.entity_description = SENSOR_DESCRIPTION

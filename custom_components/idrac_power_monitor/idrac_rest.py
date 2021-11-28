@@ -1,6 +1,6 @@
 import requests
+from homeassistant.exceptions import HomeAssistantError
 
-from config_flow import InvalidAuth, RedfishConfig, CannotConnect
 from const import (
     JSON_NAME, JSON_MANUFACTURER, JSON_MODEL, JSON_SERIAL_NUMBER,
     JSON_POWER_CONSUMED_WATTS, JSON_FIRMWARE_VERSION
@@ -56,3 +56,15 @@ class IdracRest:
 
         manager_results = result.json()
         return manager_results[JSON_FIRMWARE_VERSION]
+
+
+class CannotConnect(HomeAssistantError):
+    """Error to indicate we cannot connect."""
+
+
+class InvalidAuth(HomeAssistantError):
+    """Error to indicate there is invalid auth."""
+
+
+class RedfishConfig(HomeAssistantError):
+    """Error to indicate that Redfish was not properly configured"""
