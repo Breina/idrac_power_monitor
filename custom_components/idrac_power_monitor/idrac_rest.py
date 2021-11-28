@@ -1,5 +1,4 @@
 import requests
-from homeassistant.core import HomeAssistant as hass
 from homeassistant.exceptions import HomeAssistantError
 
 from .const import (
@@ -33,14 +32,14 @@ class IdracRest:
         self.auth = (username, password)
 
     def get_power_usage(self):
-        result = await hass.async_add_executor_job(requests.get(protocol + self.host + drac_powercontrol_path, auth=self.auth, verify=False))
+        result = self.get_path(drac_powercontrol_path)
         handle_error(result)
 
         power_results = result.json()
         return power_results[JSON_POWER_CONSUMED_WATTS]
 
     def get_device_info(self):
-        result = await hass.async_add_executor_job(requests.get(protocol + self.host + drac_chassis_path, auth=self.auth, verify=False))
+        result = self.get_path(drac_chassis_path)
         handle_error(result)
 
         chassis_results = result.json()
@@ -52,11 +51,14 @@ class IdracRest:
         }
 
     def get_firmware_version(self):
-        result = await hass.async_add_executor_job(requests.get(protocol + self.host + drac_chassis_path, auth=self.auth, verify=False))
+        result = self.get_path(drac_chassis_path)
         handle_error(result)
 
         manager_results = result.json()
         return manager_results[JSON_FIRMWARE_VERSION]
+
+    def get_path(self, path):
+        return requests.get(protocol + self.host + path, auth=self.auth, verify=False)
 
 
 class CannotConnect(HomeAssistantError):

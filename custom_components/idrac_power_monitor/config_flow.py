@@ -26,14 +26,15 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
 )
 
 
-async def validate_input(data: dict[str, Any]) -> dict[str, Any]:
+def validate_input(data: dict[str, Any]) -> dict[str, Any]:
     rest_client = IdracRest(
         host=data[CONF_HOST],
         username=data[CONF_USERNAME],
         password=data[CONF_PASSWORD]
     )
 
-    model_name = rest_client.get_device_info()[JSON_MODEL]
+    device_info = rest_client.get_device_info()
+    model_name = device_info[JSON_MODEL]
 
     return dict(model_name=model_name)
 
@@ -56,7 +57,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
 
         try:
-            info = await validate_input(user_input)
+            info = validate_input(user_input)
         except CannotConnect:
             errors["base"] = "cannot_connect"
         except InvalidAuth:
