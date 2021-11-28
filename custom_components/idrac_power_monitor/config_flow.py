@@ -11,8 +11,9 @@ from homeassistant.const import CONF_HOST, CONF_USERNAME, CONF_PASSWORD
 from homeassistant.data_entry_flow import FlowResult
 
 from .const import (
-    DOMAIN,
+    DOMAIN, JSON_MODEL,
 )
+from .idrac_rest import IdracRest, CannotConnect, InvalidAuth, RedfishConfig
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -26,15 +27,14 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
 
 
 async def validate_input(data: dict[str, Any]) -> dict[str, Any]:
-    # rest_client = IdracRest(
-    #     host=data[CONF_HOST],
-    #     username=data[CONF_USERNAME],
-    #     password=data[CONF_PASSWORD]
-    # )
-    #
-    # model_name = rest_client.get_device_info()[JSON_MODEL]
+    rest_client = IdracRest(
+        host=data[CONF_HOST],
+        username=data[CONF_USERNAME],
+        password=data[CONF_PASSWORD]
+    )
 
-    model_name = 'test'
+    model_name = rest_client.get_device_info()[JSON_MODEL]
+
     return dict(model_name=model_name)
 
 
@@ -57,12 +57,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         try:
             info = await validate_input(user_input)
-        # except CannotConnect:
-        #     errors["base"] = "cannot_connect"
-        # except InvalidAuth:
-        #     errors["base"] = "invalid_auth"
-        # except RedfishConfig:
-        #     errors["base"] = "redfish_config"
+        except CannotConnect:
+            errors["base"] = "cannot_connect"
+        except InvalidAuth:
+            errors["base"] = "invalid_auth"
+        except RedfishConfig:
+            errors["base"] = "redfish_config"
         except Exception:
             _LOGGER.exception("Unexpected exception")
             errors["base"] = "unknown"

@@ -1,7 +1,8 @@
 import requests
+from homeassistant.core import HomeAssistant as hass
 from homeassistant.exceptions import HomeAssistantError
 
-from const import (
+from .const import (
     JSON_NAME, JSON_MANUFACTURER, JSON_MODEL, JSON_SERIAL_NUMBER,
     JSON_POWER_CONSUMED_WATTS, JSON_FIRMWARE_VERSION
 )
@@ -32,14 +33,14 @@ class IdracRest:
         self.auth = (username, password)
 
     def get_power_usage(self):
-        result = requests.get(protocol + self.host + drac_powercontrol_path, auth=self.auth, verify=False)
+        result = await hass.async_add_executor_job(requests.get(protocol + self.host + drac_powercontrol_path, auth=self.auth, verify=False))
         handle_error(result)
 
         power_results = result.json()
         return power_results[JSON_POWER_CONSUMED_WATTS]
 
     def get_device_info(self):
-        result = requests.get(protocol + self.host + drac_chassis_path, auth=self.auth, verify=False)
+        result = await hass.async_add_executor_job(requests.get(protocol + self.host + drac_chassis_path, auth=self.auth, verify=False))
         handle_error(result)
 
         chassis_results = result.json()
@@ -51,7 +52,7 @@ class IdracRest:
         }
 
     def get_firmware_version(self):
-        result = requests.get(protocol + self.host + drac_chassis_path, auth=self.auth, verify=False)
+        result = await hass.async_add_executor_job(requests.get(protocol + self.host + drac_chassis_path, auth=self.auth, verify=False))
         handle_error(result)
 
         manager_results = result.json()

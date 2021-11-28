@@ -7,10 +7,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from requests import RequestException
 
-from const import (
-    JSON_MODEL, JSON_SERIAL_NUMBER
-)
-from .const import (DOMAIN,
+from .const import (DOMAIN, JSON_MODEL, JSON_SERIAL_NUMBER,
                     SENSOR_DESCRIPTION, DATA_IDRAC_REST_CLIENT)
 from .idrac_rest import IdracRest
 
