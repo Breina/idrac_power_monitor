@@ -25,7 +25,7 @@ JSON_POWER_CONSUMED_WATTS = 'PowerConsumedWatts'
 
 CURRENT_POWER_SENSOR_DESCRIPTION = SensorEntityDescription(
     key='current_power_usage',
-    name='Server current power usage',
+    name=' current power usage',
     icon='mdi:server',
     native_unit_of_measurement=POWER_WATT,
     device_class=DEVICE_CLASS_ENERGY,
@@ -34,7 +34,7 @@ CURRENT_POWER_SENSOR_DESCRIPTION = SensorEntityDescription(
 
 TOTAL_POWER_SENSOR_DESCRIPTION = SensorEntityDescription(
     key='total_power_usage',
-    name='Server total power usage',
+    name=' total power usage',
     icon='mdi:server',
     native_unit_of_measurement=ENERGY_WATT_HOUR,
     device_class=DEVICE_CLASS_ENERGY,

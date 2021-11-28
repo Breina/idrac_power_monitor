@@ -56,6 +56,7 @@ class IdracCurrentPowerSensor(SensorEntity):
         self.rest = rest
 
         self.entity_description = CURRENT_POWER_SENSOR_DESCRIPTION
+        self.entity_description.name = rest.get_device_info()[JSON_MODEL] + self.entity_description.name
         self._attr_device_info = device_info
         self._attr_unique_id = unique_id
 
@@ -74,10 +75,11 @@ class IdracTotalPowerSensor(SensorEntity):
         self.rest = rest
 
         self.entity_description = TOTAL_POWER_SENSOR_DESCRIPTION
+        self.entity_description.name = rest.get_device_info()[JSON_MODEL] + self.entity_description.name
         self._attr_device_info = device_info
         self._attr_unique_id = unique_id
 
-        self._attr_native_value = None
+        self._attr_native_value = 0
 
     def update(self) -> None:
         """Get the latest data from the iDrac."""
