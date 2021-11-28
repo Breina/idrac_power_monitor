@@ -1,15 +1,20 @@
 """Platform for iDrac power sensor integration."""
 from __future__ import annotations
 
+import logging
 import backoff as backoff
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import DeviceInfo
 from requests import RequestException
 
-from .const import (DOMAIN, JSON_MODEL, JSON_SERIAL_NUMBER,
-                    SENSOR_DESCRIPTION, DATA_IDRAC_REST_CLIENT)
+from .const import (DOMAIN, CURRENT_POWER_SENSOR_DESCRIPTION, DATA_IDRAC_REST_CLIENT, JSON_NAME, JSON_MODEL,
+                    JSON_MANUFACTURER,
+                    JSON_SERIAL_NUMBER, TOTAL_POWER_SENSOR_DESCRIPTION)
 from .idrac_rest import IdracRest
+
+_LOGGER = logging.getLogger(__name__)
 
 protocol = 'https://'
 drac_managers = '/redfish/v1/Managers/iDRAC.Embedded.1'
@@ -21,37 +26,61 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     """Add iDrac power sensor entry"""
     rest_client = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_REST_CLIENT]
 
-    name, model, manufacturer, serial = rest_client.get_device_info()
-    firmware_version = rest_client.get_firmware_version()
+    # TODO figure out how to properly do async stuff in Python lol
+    info = await hass.async_add_executor_job(target=rest_client.get_device_info)
+    firmware_version = await hass.async_add_executor_job(target=rest_client.get_firmware_version)
 
-    device_info = {
-        'identifiers': {(DOMAIN, model, serial)},
-        'name': name,
-        'manufacturer': manufacturer,
-        'model': model,
-        'sw_version': firmware_version
-    }
+    name = info[JSON_NAME]
+    model = info[JSON_MODEL]
+    manufacturer = info[JSON_MANUFACTURER]
+    serial = info[JSON_SERIAL_NUMBER]
 
-    async_add_entities(IdracPowerSensor(rest_client, device_info))
+    device_info = DeviceInfo(
+        identifiers={('domain', DOMAIN), ('model', model), ('serial', serial)},
+        name=name,
+        manufacturer=manufacturer,
+        model=model,
+        sw_version=firmware_version
+    )
+
+    async_add_entities([
+        IdracCurrentPowerSensor(rest_client, device_info, f"{serial}_{model}_current"),
+        IdracTotalPowerSensor(rest_client, device_info, f"{serial}_{model}_total")
+    ])
 
 
-class IdracPowerSensor(SensorEntity):
-    """The iDrac's power sensor entity."""
+class IdracCurrentPowerSensor(SensorEntity):
+    """The iDrac's current power sensor entity."""
 
-    def __init__(self, rest: IdracRest, device_info):
+    def __init__(self, rest: IdracRest, device_info, unique_id):
         self.rest = rest
 
-        self.entity_description = SENSOR_DESCRIPTION
+        self.entity_description = CURRENT_POWER_SENSOR_DESCRIPTION
         self._attr_device_info = device_info
-        self._attr_unique_id = f"{device_info[JSON_SERIAL_NUMBER]}_{device_info[JSON_MODEL]}"
+        self._attr_unique_id = unique_id
 
-        self._state = None
+        self._attr_native_value = None
 
     def update(self) -> None:
         """Get the latest data from the iDrac."""
 
-        @backoff.on_exception(backoff.expo, exception=RequestException, max_time=120)
-        def _get_value():
-            return self.rest.get_power_usage
+        self._attr_native_value = self.rest.get_power_usage()
 
-        self._state = _get_value()
+
+class IdracTotalPowerSensor(SensorEntity):
+    """The iDrac's total power sensor entity."""
+
+    def __init__(self, rest: IdracRest, device_info, unique_id):
+        self.rest = rest
+
+        self.entity_description = TOTAL_POWER_SENSOR_DESCRIPTION
+        self._attr_device_info = device_info
+        self._attr_unique_id = unique_id
+
+        self._attr_native_value = None
+
+    def update(self) -> None:
+        """Get the latest data from the iDrac."""
+
+        self._attr_native_value += self.rest.get_power_usage()
+

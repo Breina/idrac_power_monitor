@@ -8,6 +8,7 @@ from typing import Any
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_USERNAME, CONF_PASSWORD
+from homeassistant.core import HomeAssistant as hass
 from homeassistant.data_entry_flow import FlowResult
 
 from .const import (
@@ -24,19 +25,6 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Required(CONF_PASSWORD): str
     }
 )
-
-
-def validate_input(data: dict[str, Any]) -> dict[str, Any]:
-    rest_client = IdracRest(
-        host=data[CONF_HOST],
-        username=data[CONF_USERNAME],
-        password=data[CONF_PASSWORD]
-    )
-
-    device_info = rest_client.get_device_info()
-    model_name = device_info[JSON_MODEL]
-
-    return dict(model_name=model_name)
 
 
 @config_entries.HANDLERS.register(DOMAIN)
@@ -57,7 +45,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
 
         try:
-            info = validate_input(user_input)
+            info = await self.validate_input(user_input)
         except CannotConnect:
             errors["base"] = "cannot_connect"
         except InvalidAuth:
@@ -74,3 +62,15 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors
         )
+
+    async def validate_input(self, data: dict[str, Any]) -> dict[str, Any]:
+        rest_client = IdracRest(
+            host=data[CONF_HOST],
+            username=data[CONF_USERNAME],
+            password=data[CONF_PASSWORD]
+        )
+
+        device_info = await hass.async_add_executor_job(self.hass, target=rest_client.get_device_info)
+        model_name = device_info[JSON_MODEL]
+
+        return dict(model_name=model_name)

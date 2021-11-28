@@ -7,7 +7,7 @@ from .const import (
 )
 
 protocol = 'https://'
-drac_managers = '/redfish/v1/Managers/iDRAC.Embedded.1'
+drac_managers_path = '/redfish/v1/Managers/iDRAC.Embedded.1'
 drac_chassis_path = '/redfish/v1/Chassis/System.Embedded.1'
 drac_powercontrol_path = '/redfish/v1/Chassis/System.Embedded.1/Power/PowerControl'
 
@@ -51,7 +51,7 @@ class IdracRest:
         }
 
     def get_firmware_version(self):
-        result = self.get_path(drac_chassis_path)
+        result = self.get_path(drac_managers_path)
         handle_error(result)
 
         manager_results = result.json()
