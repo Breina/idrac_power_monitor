@@ -14,7 +14,7 @@ from homeassistant.data_entry_flow import FlowResult
 from .const import (
     DOMAIN, JSON_MODEL,
 )
-from .schneider_modbus import SchneiderModbus, CannotConnect, InvalidAuth, RedfishConfig
+from .idrac_rest import IdracRest, CannotConnect, InvalidAuth, RedfishConfig
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -64,7 +64,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def validate_input(self, data: dict[str, Any]) -> dict[str, Any]:
-        rest_client = SchneiderModbus(
+        rest_client = IdracRest(
             host=data[CONF_HOST],
             username=data[CONF_USERNAME],
             password=data[CONF_PASSWORD]

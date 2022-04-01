@@ -4,7 +4,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN, DATA_IDRAC_REST_CLIENT, HOST, USERNAME, PASSWORD
-from .schneider_modbus import SchneiderModbus
+from .idrac_rest import IdracRest
 
 PLATFORMS: list[str] = ["sensor"]
 
@@ -12,7 +12,7 @@ PLATFORMS: list[str] = ["sensor"]
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up the iDrac connection from a config entry."""
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
-        DATA_IDRAC_REST_CLIENT: SchneiderModbus(entry.data[HOST], entry.data[USERNAME], entry.data[PASSWORD])
+        DATA_IDRAC_REST_CLIENT: IdracRest(entry.data[HOST], entry.data[USERNAME], entry.data[PASSWORD])
     }
 
     hass.config_entries.async_setup_platforms(entry, PLATFORMS)
