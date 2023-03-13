@@ -1,5 +1,5 @@
 {
-  "domain": "dell_printer",
+  "domain": "idrac_power",
   "name": "iDrac power monitor",
   "config_flow": true,
   "documentation": "https://www.home-assistant.io/integrations/idrac_power",
