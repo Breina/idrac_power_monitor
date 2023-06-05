@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "minor_version": 10,
+  "key": "core.entity_registry",
+  "data": {
+    "entities": [
+      {
+        "aliases": [],
+        "area_id": null,
+        "capabilities": null,
+        "config_entry_id": null,
+        "device_class": null,
+        "device_id": null,
+        "disabled_by": null,
+        "entity_category": null,
+        "entity_id": "person.admin",
+        "hidden_by": null,
+        "icon": null,
+        "id": "3781b293cc53fddc950769a86a44886f",
+        "has_entity_name": false,
+        "name": null,
+        "options": {},
+        "original_device_class": null,
+        "original_icon": null,
+        "original_name": "admin",
+        "platform": "person",
+        "supported_features": 0,
+        "translation_key": null,
+        "unique_id": "admin",
+        "unit_of_measurement": null
+      }
+    ]
+  }
+}

@@ -1,12 +1,11 @@
 """iDrac power usage monitor"""
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN, DATA_IDRAC_REST_CLIENT, HOST, USERNAME, PASSWORD
 from .idrac_rest import IdracRest
-
-PLATFORMS: list[str] = ["sensor"]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -15,7 +14,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         DATA_IDRAC_REST_CLIENT: IdracRest(entry.data[HOST], entry.data[USERNAME], entry.data[PASSWORD])
     }
 
-    hass.config_entries.async_setup_platforms(entry, PLATFORMS)
+    hass.async_create_task(
+        hass.config_entries.async_forward_entry_setup(
+            entry, Platform.SENSOR
+        )
+    )
 
     return True
 
