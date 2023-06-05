@@ -12,4 +12,4 @@ repository into the `custom_components/idrac_power` directory
 3. Go to `Configuration` -> `Integrations` and click the `+ Add Integration` 
 button
 4. Select `iDrac power monitor` from the list
-5. Enter the IP address of your iDrac instance, its username (`root` by default) and its password (`calvin` by default).
+5. Enter the IP address or hostname (NO `http://` !) of your iDrac instance, its username (`root` by default) and its password (`calvin` by default).
