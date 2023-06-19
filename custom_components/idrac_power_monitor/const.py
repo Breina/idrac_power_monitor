@@ -1,5 +1,5 @@
 from homeassistant.const import (
-    POWER_WATT, ENERGY_WATT_HOUR,
+    POWER_WATT, ENERGY_WATT_HOUR, ENERGY_KILO_WATT_HOUR,
     DEVICE_CLASS_ENERGY
 )
 
@@ -28,7 +28,7 @@ CURRENT_POWER_SENSOR_DESCRIPTION = SensorEntityDescription(
     name=' current power usage',
     icon='mdi:server',
     native_unit_of_measurement=POWER_WATT,
-    device_class=DEVICE_CLASS_ENERGY,
+    # device_class=DEVICE_CLASS_ENERGY,
     state_class=STATE_CLASS_MEASUREMENT
 )
 
@@ -36,7 +36,7 @@ TOTAL_POWER_SENSOR_DESCRIPTION = SensorEntityDescription(
     key='total_power_usage',
     name=' total power usage',
     icon='mdi:server',
-    native_unit_of_measurement=ENERGY_WATT_HOUR,
-    device_class=DEVICE_CLASS_ENERGY,
-    state_class=STATE_CLASS_TOTAL
+    native_unit_of_measurement=ENERGY_KILO_WATT_HOUR,
+    # device_class=DEVICE_CLASS_ENERGY,
+    state_class=STATE_CLASS_MEASUREMENT
 )
