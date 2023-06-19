@@ -99,6 +99,6 @@ class IdracTotalPowerSensor(SensorEntity):
         power_usage = await self.hass.async_add_executor_job(self.rest.get_power_usage)
         power_usage_kw = power_usage / 1000.0
 
-        self._attr_native_value += round(power_usage_kw * hours_between, 2)
+        self._attr_native_value += power_usage_kw * hours_between
 
         self.last_update = now
