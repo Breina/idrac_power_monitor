@@ -121,7 +121,6 @@ class IdracFanSensor(SensorEntity):
         self.custom_name = name
         self._attr_device_info = device_info
         self._attr_unique_id = unique_id
-        
         self._attr_has_entity_name = True
         
         self._attr_native_value = None
@@ -145,9 +144,10 @@ class IdracTempSensor(SensorEntity):
         self.entity_description = TEMP_SENSOR_DESCRIPTION
         self.entity_description.name = name
         self.custom_name = name
+        
         self._attr_device_info = device_info
         self._attr_unique_id = unique_id
-
+        self._attr_has_entity_name = True
         self._attr_native_value = None
         self.id = id
         

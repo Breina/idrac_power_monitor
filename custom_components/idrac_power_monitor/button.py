@@ -55,7 +55,7 @@ class IdracPowerONButton(ButtonEntity):
 
         self._attr_device_info = device_info
         self._attr_unique_id = unique_id
-
+        self._attr_has_entity_name = True
 
     async def async_press(self) -> None:
         result = await self.hass.async_add_executor_job(self.rest.power_on)
@@ -77,7 +77,7 @@ class IdraRefreshButton(ButtonEntity):
 
         self._attr_device_info = device_info
         self._attr_unique_id = unique_id
-
+        self._attr_has_entity_name = True
 
     async def async_press(self) -> None:
         _LOGGER.warn("Refreshing sensors")
