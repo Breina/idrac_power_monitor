@@ -6,7 +6,8 @@
         "data": {
           "host": "Hostname of the iDrac instance",
           "username": "iDrac username",
-          "password": "iDrac password"
+          "password": "iDrac password",
+          "interval": "Interval in seconds between each poll"
         }
       }
     },

@@ -12,7 +12,7 @@ from homeassistant.core import HomeAssistant as hass
 from homeassistant.data_entry_flow import FlowResult
 
 from .const import (
-    DOMAIN, JSON_MODEL,
+    DOMAIN, JSON_MODEL, CONF_INTERVAL,
 )
 from .idrac_rest import IdracRest, CannotConnect, InvalidAuth, RedfishConfig
 
@@ -22,7 +22,8 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_HOST): str,
         vol.Required(CONF_USERNAME): str,
-        vol.Required(CONF_PASSWORD): str
+        vol.Required(CONF_PASSWORD): str,
+        vol.Required(CONF_INTERVAL, default=300): int,
     }
 )
 
@@ -67,7 +68,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         rest_client = IdracRest(
             host=data[CONF_HOST],
             username=data[CONF_USERNAME],
-            password=data[CONF_PASSWORD]
+            password=data[CONF_PASSWORD],
+            interval=data[CONF_INTERVAL],
         )
 
         device_info = await hass.async_add_executor_job(self.hass, target=rest_client.get_device_info)
