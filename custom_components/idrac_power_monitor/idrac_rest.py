@@ -96,22 +96,32 @@ class IdracRest:
         global status_values
         result = self.get_path(drac_chassis_path)
         handle_error(result)
-        status_values = result.json() 
-        return status_values[JSON_STATUS][JSON_STATUS_STATE] == 'Enabled'
+        status_values = result.json()
+        try:
+            return status_values[JSON_STATUS][JSON_STATUS_STATE] == 'Enabled'
+        except:
+            return False
     def get_status(self):
         global status_values
-        return status_values[JSON_STATUS][JSON_STATUS_STATE] == 'Enabled'
-    
+        try:
+            return status_values[JSON_STATUS][JSON_STATUS_STATE] == 'Enabled'
+        except:
+            return False
     def update_power_usage(self):
         global power_values
         result = self.get_path(drac_powercontrol_path)
         handle_error(result)
         power_values = result.json()
-        return power_values[JSON_POWER_CONSUMED_WATTS]
+        try:
+            return power_values[JSON_POWER_CONSUMED_WATTS]
+        except:
+            return 0
     def get_power_usage(self):
         global power_values
-        return power_values[JSON_POWER_CONSUMED_WATTS]
-
+        try:
+            return power_values[JSON_POWER_CONSUMED_WATTS]
+        except:
+            return 0
         
 class CannotConnect(HomeAssistantError):
     """Error to indicate we cannot connect."""
