@@ -16,7 +16,7 @@ from homeassistant.components.button import (
     ButtonEntityDescription,
     ButtonDeviceClass,
 )
-DOMAIN = 'idrac'
+DOMAIN = 'idrac_power_monitor'
 
 DATA_IDRAC_REST_CLIENT = 'client'
 

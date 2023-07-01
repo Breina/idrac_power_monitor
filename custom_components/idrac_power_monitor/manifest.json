@@ -1,5 +1,5 @@
 {
-  "domain": "idrac",
+  "domain": "idrac_power_monitor",
   "name": "iDRAC Server Monitor",
   "config_flow": true,
   "documentation": "https://www.home-assistant.io/integrations/idrac_power",
