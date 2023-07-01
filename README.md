@@ -1,4 +1,4 @@
-# iDrac server monitor
+# iDRAC Server Monitor
 
 This integration will grab infomations from your Dell servers' iDrac system :
 

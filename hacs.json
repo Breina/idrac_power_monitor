@@ -1,5 +1,5 @@
 {
-  "name": "iDrac Server Monitor",
+  "name": "iDRAC Server Monitor",
   "render_readme": true,
   "domains": [
     "sensor"
