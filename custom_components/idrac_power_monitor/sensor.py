@@ -3,16 +3,16 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from homeassistant.const import CONF_HOST
-from homeassistant.components.sensor import SensorEntity
+
+from homeassistant.components.sensor import SensorEntity, SensorEntityDescription, SensorDeviceClass, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_HOST, UnitOfPower, UnitOfEnergy
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
-from requests import RequestException
 
-from .const import (DOMAIN, CURRENT_POWER_SENSOR_DESCRIPTION, DATA_IDRAC_REST_CLIENT, JSON_NAME, JSON_MODEL,
+from .const import (DOMAIN, DATA_IDRAC_REST_CLIENT, JSON_NAME, JSON_MODEL,
                     JSON_MANUFACTURER,
-                    JSON_SERIAL_NUMBER, TOTAL_POWER_SENSOR_DESCRIPTION)
+                    JSON_SERIAL_NUMBER)
 from .idrac_rest import IdracRest
 
 _LOGGER = logging.getLogger(__name__)
@@ -57,8 +57,14 @@ class IdracCurrentPowerSensor(SensorEntity):
         self.hass = hass
         self.rest = rest
 
-        self.entity_description = CURRENT_POWER_SENSOR_DESCRIPTION
-        self.entity_description.name = name
+        self.entity_description = SensorEntityDescription(
+            key="current_power_usage",
+            name=name,
+            icon="mdi:server",
+            native_unit_of_measurement=UnitOfPower.WATT,
+            device_class=SensorDeviceClass.POWER,
+            state_class=SensorStateClass.MEASUREMENT
+        )
 
         self._attr_device_info = device_info
         self._attr_unique_id = unique_id
@@ -71,7 +77,6 @@ class IdracCurrentPowerSensor(SensorEntity):
         self._attr_native_value = await self.hass.async_add_executor_job(self.rest.get_power_usage)
 
 
-
 class IdracTotalPowerSensor(SensorEntity):
     """The iDrac's total power sensor entity."""
 
@@ -79,8 +84,15 @@ class IdracTotalPowerSensor(SensorEntity):
         self.hass = hass
         self.rest = rest
 
-        self.entity_description = TOTAL_POWER_SENSOR_DESCRIPTION
-        self.entity_description.name = name
+        self.entity_description = SensorEntityDescription(
+            key="total_power_usage",
+            name=name,
+            icon="mdi:server",
+            native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+            device_class=SensorDeviceClass.ENERGY,
+            state_class=SensorStateClass.TOTAL
+        )
+
         self._attr_device_info = device_info
         self._attr_unique_id = unique_id
 

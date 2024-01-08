@@ -9,6 +9,6 @@
     "@Breina"
   ],
   "iot_class": "local_polling",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "issue_tracker": "https://github.com/Breina/idrac_power_monitor/issues"
 }
