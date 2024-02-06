@@ -1,6 +1,5 @@
 {
   "name": "iDrac power monitor",
   "render_readme": true,
-  "iot_class": ["Local Polling"],
   "content_in_root": false
 }
