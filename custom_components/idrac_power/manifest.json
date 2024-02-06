@@ -1,4 +1,6 @@
 {
+  "domain": "idrac_power",
+  "name": "iDrac power monitor",
   "codeowners": [
     "@Breina"
   ],
@@ -7,10 +9,8 @@
     "http"
   ],
   "documentation": "https://www.home-assistant.io/integrations/idrac_power",
-  "domain": "idrac_power",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/Breina/idrac_power_monitor/issues"
-  "name": "iDrac power monitor",
   "requirements": [],
   "version": "1.1.0"
 }
