@@ -2,21 +2,17 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
-from homeassistant.const import CONF_HOST
-from homeassistant.components.sensor import SensorEntity
-from homeassistant.components.button import ButtonEntity
 
+from homeassistant.components.button import ButtonEntity, ButtonEntityDescription, ButtonDeviceClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
-from requests import RequestException
 
-from .const import (DOMAIN, DATA_IDRAC_REST_CLIENT, JSON_NAME, JSON_MODEL,
-                    JSON_MANUFACTURER,
-                    JSON_SERIAL_NUMBER, POWER_ON_DESCRIPTION, REFRESH_DESCRIPTION)
+from .const import (DOMAIN, DATA_IDRAC_REST_CLIENT, JSON_MODEL, JSON_MANUFACTURER, JSON_SERIAL_NUMBER)
 from .idrac_rest import IdracRest
+
 _LOGGER = logging.getLogger(__name__)
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
     """Add iDrac power sensor entry"""
@@ -41,17 +37,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 
     async_add_entities([
         IdracPowerONButton(hass, rest_client, device_info, f"{serial}_{model}_status", name),
-        IdraRefreshButton(hass, rest_client, device_info, f"{serial}_{model}_refresh", name)
+        IdracRefreshButton(hass, rest_client, device_info, f"{serial}_{model}_refresh", name)
     ])
 
+
 class IdracPowerONButton(ButtonEntity):
-    
+
     def __init__(self, hass, rest: IdracRest, device_info, unique_id, name):
         self.hass = hass
         self.rest = rest
 
-        self.entity_description = POWER_ON_DESCRIPTION
-        self.entity_description.name = name
+        self.entity_description = ButtonEntityDescription(
+            key='power_on',
+            name=name,
+            icon='mdi:power',
+            device_class=ButtonDeviceClass.UPDATE,
+        )
 
         self._attr_device_info = device_info
         self._attr_unique_id = unique_id
@@ -59,21 +60,25 @@ class IdracPowerONButton(ButtonEntity):
 
     async def async_press(self) -> None:
         result = await self.hass.async_add_executor_job(self.rest.power_on)
-        
+
     @property
     def name(self):
         """Name of the entity."""
-        return "Power On" 
-            
+        return "Power On"
 
-class IdraRefreshButton(ButtonEntity):
-    
+
+class IdracRefreshButton(ButtonEntity):
+
     def __init__(self, hass, rest: IdracRest, device_info, unique_id, name):
         self.hass = hass
         self.rest = rest
 
-        self.entity_description = POWER_ON_DESCRIPTION
-        self.entity_description.name = name
+        self.entity_description = ButtonEntityDescription(
+            key='power_on',
+            name=name,
+            icon='mdi:power',
+            device_class=ButtonDeviceClass.UPDATE,
+        )
 
         self._attr_device_info = device_info
         self._attr_unique_id = unique_id
@@ -84,9 +89,8 @@ class IdraRefreshButton(ButtonEntity):
         await self.hass.async_add_executor_job(self.rest.update_thermals)
         await self.hass.async_add_executor_job(self.rest.update_status)
         await self.hass.async_add_executor_job(self.rest.update_power_usage)
-        
+
     @property
     def name(self):
         """Name of the entity."""
         return "Refresh Values"
-            

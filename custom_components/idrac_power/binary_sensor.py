@@ -2,19 +2,14 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
-from homeassistant.const import CONF_HOST
-from homeassistant.components.sensor import SensorEntity
-from homeassistant.components.binary_sensor import BinarySensorEntity
 
+from homeassistant.components.binary_sensor import BinarySensorEntity, BinarySensorDeviceClass, \
+    BinarySensorEntityDescription
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
-from requests import RequestException
 
-from .const import (DOMAIN, CURRENT_POWER_SENSOR_DESCRIPTION, DATA_IDRAC_REST_CLIENT, JSON_NAME, JSON_MODEL,
-                    JSON_MANUFACTURER,
-                    JSON_SERIAL_NUMBER, STATUS_BINARY_SENSOR_DESCRIPTION)
+from .const import (DOMAIN, DATA_IDRAC_REST_CLIENT, JSON_MODEL, JSON_MANUFACTURER, JSON_SERIAL_NUMBER)
 from .idrac_rest import IdracRest
 
 _LOGGER = logging.getLogger(__name__)
@@ -32,7 +27,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     # TODO figure out how to properly do async stuff in Python lol
     info = await hass.async_add_executor_job(target=rest_client.get_device_info)
     firmware_version = await hass.async_add_executor_job(target=rest_client.get_firmware_version)
-    
+
     model = info[JSON_MODEL]
     name = model
     manufacturer = info[JSON_MANUFACTURER]
@@ -49,7 +44,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     async_add_entities([
         IdracStatusBinarySensor(hass, rest_client, device_info, f"{serial}_{model}_status", f"{model}_status"),
     ])
-    
+
 
 class IdracStatusBinarySensor(BinarySensorEntity):
     """The iDrac's current power sensor entity."""
@@ -58,13 +53,16 @@ class IdracStatusBinarySensor(BinarySensorEntity):
         self.hass = hass
         self.rest = rest
 
-        self.entity_description = STATUS_BINARY_SENSOR_DESCRIPTION
-        self.entity_description.name = name
+        self.entity_description = BinarySensorEntityDescription(
+            key='status',
+            name=name,
+            icon='mdi:power',
+            device_class=BinarySensorDeviceClass.POWER,
+        )
 
         self._attr_device_info = device_info
         self._attr_unique_id = unique_id
         self._attr_has_entity_name = True
-
 
     async def async_update(self) -> None:
         """Get the latest data from the iDrac."""

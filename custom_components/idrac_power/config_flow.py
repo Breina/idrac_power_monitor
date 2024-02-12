@@ -12,7 +12,7 @@ from homeassistant.core import HomeAssistant as hass
 from homeassistant.data_entry_flow import FlowResult
 
 from .const import (
-    DOMAIN, JSON_MODEL, CONF_INTERVAL,
+    DOMAIN, JSON_MODEL, CONF_INTERVAL, CONF_INTERVAL_DEFAULT,
 )
 from .idrac_rest import IdracRest, CannotConnect, InvalidAuth, RedfishConfig
 
@@ -23,7 +23,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Required(CONF_HOST): str,
         vol.Required(CONF_USERNAME): str,
         vol.Required(CONF_PASSWORD): str,
-        vol.Required(CONF_INTERVAL, default=300): int,
+        vol.Required(CONF_INTERVAL, default=CONF_INTERVAL_DEFAULT): int,
     }
 )
 
