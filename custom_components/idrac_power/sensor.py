@@ -81,6 +81,7 @@ class IdracCurrentPowerSensor(SensorEntity):
             key='current_power_usage',
             name=name,
             icon='mdi:lightning-bolt',
+            native_unit_of_measurement='W',
             device_class=SensorDeviceClass.POWER,
             state_class=SensorStateClass.MEASUREMENT
         )
