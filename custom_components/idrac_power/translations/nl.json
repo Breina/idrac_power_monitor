@@ -6,7 +6,8 @@
         "data": {
           "host": "Hostnaam van de iDrac instantie",
           "username": "iDrac gebruikersnaam",
-          "password": "iDrac wachtwoord"
+          "password": "iDrac wachtwoord",
+          "interval": "Interval in seconds between each poll"
         }
       }
     },

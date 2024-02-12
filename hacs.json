@@ -1,5 +1,11 @@
 {
-  "name": "iDrac power monitor",
+  "name": "iDRAC Server Monitor",
   "render_readme": true,
+  "domains": [
+    "sensor"
+  ],
+  "iot_class": [
+    "Local Polling"
+  ],
   "content_in_root": false
 }

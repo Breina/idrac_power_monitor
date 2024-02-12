@@ -1,8 +1,9 @@
 {
   "domain": "idrac_power",
-  "name": "iDrac power monitor",
+  "name": "iDRAC Server Monitor",
   "codeowners": [
-    "@Breina"
+    "@Breina",
+    "@Xmow49"
   ],
   "config_flow": true,
   "dependencies": [
