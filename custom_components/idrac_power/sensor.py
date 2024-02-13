@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 
 from homeassistant.components.sensor import SensorEntity, SensorEntityDescription, SensorStateClass, SensorDeviceClass
@@ -55,7 +56,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         async_add_entities([
             IdracTempSensor(hass, rest_client, device_info, f"{model}_temp_{i}", temp["Name"], i)])
 
-    async def refresh_sensors_task(hass):
+    async def refresh_sensors_task():
         while True:
             _LOGGER.debug("Refreshing sensors")
             await hass.async_add_executor_job(rest_client.update_thermals)
@@ -63,11 +64,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
             await hass.async_add_executor_job(rest_client.update_power_usage)
             await asyncio.sleep(rest_client.interval)
 
-    def start_sensors_task(event):
-        _LOGGER.info("Starting sensors task")
-        hass.async_create_task(refresh_sensors_task(hass))
-
-    hass.bus.async_listen_once('homeassistant_started', start_sensors_task)
+    hass.async_create_background_task(refresh_sensors_task(), "Update iDRAC task")
 
 
 class IdracCurrentPowerSensor(SensorEntity):
@@ -92,14 +89,16 @@ class IdracCurrentPowerSensor(SensorEntity):
 
         self._attr_native_value = None
 
-    async def async_update(self) -> None:
-        """Get the latest data from the iDrac."""
-        self._attr_native_value = self.rest.get_power_usage()
+        self.rest.register_callback_power_usage(self.update_value)
 
     @property
     def name(self):
         """Name of the entity."""
         return "Power Usage"
+
+    def update_value(self, new_value: int):
+        self._attr_native_value = new_value
+        self.async_schedule_update_ha_state()
 
 
 class IdracFanSensor(SensorEntity):
@@ -125,15 +124,16 @@ class IdracFanSensor(SensorEntity):
         self._attr_native_value = None
         self.id = id
 
+        self.rest.register_callback_thermals(self.update_value)
+
     @property
     def name(self):
         """Name of the entity."""
         return self.custom_name
 
-    async def async_update(self) -> None:
-        """Get the latest data from the iDrac."""
-        thermal = self.rest.get_thermals()
+    def update_value(self, thermal: dict):
         self._attr_native_value = thermal['Fans'][self.id]['Reading']
+        self.async_schedule_update_ha_state()
 
 
 class IdracTempSensor(SensorEntity):
@@ -159,12 +159,13 @@ class IdracTempSensor(SensorEntity):
         self._attr_native_value = None
         self.id = id
 
+        self.rest.register_callback_thermals(self.update_value)
+
     @property
     def name(self):
         """Name of the entity."""
         return self.custom_name
 
-    async def async_update(self) -> None:
-        """Get the latest data from the iDrac."""
-        thermal = self.rest.get_thermals()
+    def update_value(self, thermal: dict):
         self._attr_native_value = thermal['Temperatures'][self.id]['ReadingCelsius']
+        self.async_schedule_update_ha_state()

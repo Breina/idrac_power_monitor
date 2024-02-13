@@ -1,4 +1,5 @@
 import logging
+from typing import Callable
 
 import requests
 import urllib3
@@ -35,16 +36,19 @@ def handle_error(result):
         raise CannotConnect(result.text)
 
 
-thermals_values = None
-status_values = None
-power_values = None
-
-
 class IdracRest:
     def __init__(self, host, username, password, interval):
         self.host = host
         self.auth = (username, password)
         self.interval = interval
+
+        self.callback_thermals: list[Callable[[dict], None]] = []
+        self.callback_status: list[Callable[[bool], None]] = []
+        self.callback_power_usage: list[Callable[[int], None]] = []
+
+        self.thermal_values: dict = {}
+        self.status: bool = False
+        self.power_usage: int = 0
 
     def get_device_info(self):
         result = self.get_path(drac_chassis_path)
@@ -85,50 +89,52 @@ class IdracRest:
 
         return result
 
-    def update_thermals(self):
-        global thermals_values
+    def register_callback_thermals(self, callback: Callable[[dict], None]) -> None:
+        self.callback_thermals.append(callback)
+
+    def register_callback_status(self, callback: Callable[[bool], None]) -> None:
+        self.callback_status.append(callback)
+
+    def register_callback_power_usage(self, callback: Callable[[int], None]) -> None:
+        self.callback_power_usage.append(callback)
+
+    def update_thermals(self) -> dict:
         req = self.get_path(drac_thermals)
         handle_error(req)
-        thermals_values = req.json()
-        return thermals_values
+        new_thermals = req.json()
 
-    def get_thermals(self):
-        global thermals_values
-        return thermals_values
+        if new_thermals != self.thermal_values:
+            self.thermal_values = new_thermals
+            for callback in self.callback_thermals:
+                callback(self.thermal_values)
+        return self.thermal_values
 
     def update_status(self):
-        global status_values
         result = self.get_path(drac_chassis_path)
         handle_error(result)
         status_values = result.json()
         try:
-            return status_values[JSON_STATUS][JSON_STATUS_STATE] == 'Enabled'
+            new_status = status_values[JSON_STATUS][JSON_STATUS_STATE] == 'Enabled'
         except:
-            return False
+            new_status = False
 
-    def get_status(self):
-        global status_values
-        try:
-            return status_values[JSON_STATUS][JSON_STATUS_STATE] == 'Enabled'
-        except:
-            return False
+        if new_status != self.status:
+            self.status = new_status
+            for callback in self.callback_status:
+                callback(self.status)
 
     def update_power_usage(self):
-        global power_values
         result = self.get_path(drac_powercontrol_path)
         handle_error(result)
         power_values = result.json()
         try:
-            return power_values[JSON_POWER_CONSUMED_WATTS]
+            new_power_usage = power_values[JSON_POWER_CONSUMED_WATTS]
+            if new_power_usage != self.power_usage:
+                self.power_usage = new_power_usage
+                for callback in self.callback_power_usage:
+                    callback(self.power_usage)
         except:
-            return 0
-
-    def get_power_usage(self):
-        global power_values
-        try:
-            return power_values[JSON_POWER_CONSUMED_WATTS]
-        except:
-            return 0
+            pass
 
 
 class CannotConnect(HomeAssistantError):

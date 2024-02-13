@@ -25,8 +25,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     rest_client = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_REST_CLIENT]
 
     # TODO figure out how to properly do async stuff in Python lol
-    info = await hass.async_add_executor_job(target=rest_client.get_device_info)
-    firmware_version = await hass.async_add_executor_job(target=rest_client.get_firmware_version)
+    info = await hass.async_add_executor_job(rest_client.get_device_info)
+    firmware_version = await hass.async_add_executor_job(rest_client.get_firmware_version)
 
     model = info[JSON_MODEL]
     name = model
@@ -57,19 +57,20 @@ class IdracStatusBinarySensor(BinarySensorEntity):
             key='status',
             name=name,
             icon='mdi:power',
-            device_class=BinarySensorDeviceClass.POWER,
+            device_class=BinarySensorDeviceClass.RUNNING,
         )
 
         self._attr_device_info = device_info
         self._attr_unique_id = unique_id
         self._attr_has_entity_name = True
 
-    async def async_update(self) -> None:
-        """Get the latest data from the iDrac."""
-
-        self._attr_is_on = await self.hass.async_add_executor_job(self.rest.get_status)
+        self.rest.register_callback_status(self.update_value)
 
     @property
     def name(self):
         """Name of the entity."""
         return "Server Status"
+
+    def update_value(self, status: bool):
+        self._attr_is_on = status
+        self.async_schedule_update_ha_state()
