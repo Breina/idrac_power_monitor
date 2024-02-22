@@ -37,8 +37,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     )
 
     async_add_entities([
-        IdracPowerONButton(hass, rest_client, device_info, f"{serial}_{model}_status", name),
-        IdracRefreshButton(hass, rest_client, device_info, f"{serial}_{model}_refresh", name)
+        IdracPowerONButton(hass, rest_client, device_info, f"{serial}_{name}_status", name),
+        IdracRefreshButton(hass, rest_client, device_info, f"{serial}_{name}_refresh", name)
     ])
 
 
@@ -50,7 +50,7 @@ class IdracPowerONButton(ButtonEntity):
 
         self.entity_description = ButtonEntityDescription(
             key='power_on',
-            name=name,
+            name=f"Power on {name}",
             icon='mdi:power',
             device_class=ButtonDeviceClass.UPDATE,
         )
@@ -60,12 +60,7 @@ class IdracPowerONButton(ButtonEntity):
         self._attr_has_entity_name = True
 
     async def async_press(self) -> None:
-        result = await self.hass.async_add_executor_job(self.rest.power_on)
-
-    @property
-    def name(self):
-        """Name of the entity."""
-        return "Power On"
+        await self.hass.async_add_executor_job(self.rest.power_on)
 
 
 class IdracRefreshButton(ButtonEntity):
@@ -76,7 +71,7 @@ class IdracRefreshButton(ButtonEntity):
 
         self.entity_description = ButtonEntityDescription(
             key='power_on',
-            name=name,
+            name=f"Refresh {name}",
             icon='mdi:power',
             device_class=ButtonDeviceClass.UPDATE,
         )
@@ -90,8 +85,3 @@ class IdracRefreshButton(ButtonEntity):
         await self.hass.async_add_executor_job(self.rest.update_thermals)
         await self.hass.async_add_executor_job(self.rest.update_status)
         await self.hass.async_add_executor_job(self.rest.update_power_usage)
-
-    @property
-    def name(self):
-        """Name of the entity."""
-        return "Refresh Values"

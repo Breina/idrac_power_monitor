@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-import functools
 import logging
 
 from homeassistant.components.sensor import SensorEntity, SensorEntityDescription, SensorStateClass, SensorDeviceClass
@@ -44,15 +43,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         serial_number=serial
     )
 
-    entities = [IdracCurrentPowerSensor(hass, rest_client, device_info, f"{serial}_{model}_current", name)]
+    entities = [IdracCurrentPowerSensor(hass, rest_client, device_info, f"{serial}_{name}_current", name)]
 
     for i, fan in enumerate(thermal_info['Fans']):
         _LOGGER.info("Adding fan %s : %s", i, fan["FanName"])
-        entities.append(IdracFanSensor(hass, rest_client, device_info, f"{serial}_{model}_fan_{i}", fan["FanName"], i))
+        entities.append(IdracFanSensor(hass, rest_client, device_info, f"{serial}_{name}_fan_{i}",
+                                       f"{name} {fan['FanName']}", i
+                                       ))
 
     for i, temp in enumerate(thermal_info['Temperatures']):
         _LOGGER.info("Adding temp %s : %s", i, temp["Name"])
-        entities.append(IdracTempSensor(hass, rest_client, device_info, f"{serial}_{model}_temp_{i}", temp["Name"], i))
+        entities.append(IdracTempSensor(hass, rest_client, device_info, f"{serial}_{name}_temp_{i}",
+                                        f"{name} {temp['Name']}", i
+                                        ))
 
     async_add_entities(entities)
 
@@ -76,7 +79,7 @@ class IdracCurrentPowerSensor(SensorEntity):
 
         self.entity_description = SensorEntityDescription(
             key='current_power_usage',
-            name=name,
+            name=f"{name} power usage",
             icon='mdi:lightning-bolt',
             native_unit_of_measurement='W',
             device_class=SensorDeviceClass.POWER,
@@ -90,11 +93,6 @@ class IdracCurrentPowerSensor(SensorEntity):
         self._attr_native_value = None
 
         self.rest.register_callback_power_usage(self.update_value)
-
-    @property
-    def name(self):
-        """Name of the entity."""
-        return "Power Usage"
 
     def update_value(self, new_value: int):
         self._attr_native_value = new_value
@@ -116,7 +114,6 @@ class IdracFanSensor(SensorEntity):
             state_class=SensorStateClass.MEASUREMENT
         )
 
-        self.custom_name = name
         self._attr_device_info = device_info
         self._attr_unique_id = unique_id
         self._attr_has_entity_name = True
@@ -125,11 +122,6 @@ class IdracFanSensor(SensorEntity):
         self.id = id
 
         self.rest.register_callback_thermals(self.update_value)
-
-    @property
-    def name(self):
-        """Name of the entity."""
-        return self.custom_name
 
     def update_value(self, thermal: dict):
         self._attr_native_value = thermal['Fans'][self.id]['Reading']
@@ -151,7 +143,6 @@ class IdracTempSensor(SensorEntity):
             state_class=SensorStateClass.MEASUREMENT,
             native_unit_of_measurement='°C',
         )
-        self.custom_name = name
 
         self._attr_device_info = device_info
         self._attr_unique_id = unique_id
@@ -160,11 +151,6 @@ class IdracTempSensor(SensorEntity):
         self.id = id
 
         self.rest.register_callback_thermals(self.update_value)
-
-    @property
-    def name(self):
-        """Name of the entity."""
-        return self.custom_name
 
     def update_value(self, thermal: dict):
         self._attr_native_value = thermal['Temperatures'][self.id]['ReadingCelsius']
