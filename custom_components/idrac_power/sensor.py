@@ -40,21 +40,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         name=name,
         manufacturer=manufacturer,
         model=model,
-        sw_version=firmware_version
+        sw_version=firmware_version,
+        serial_number=serial
     )
 
-    async_add_entities([
-        IdracCurrentPowerSensor(hass, rest_client, device_info, f"{serial}_{model}_current", name),
-    ])
+    entities = [IdracCurrentPowerSensor(hass, rest_client, device_info, f"{serial}_{model}_current", name)]
 
     for i, fan in enumerate(thermal_info['Fans']):
         _LOGGER.info("Adding fan %s : %s", i, fan["FanName"])
-        async_add_entities([IdracFanSensor(hass, rest_client, device_info, f"{model}_fan_{i}", fan["FanName"], i)])
+        entities.append(IdracFanSensor(hass, rest_client, device_info, f"{serial}_{model}_fan_{i}", fan["FanName"], i))
 
     for i, temp in enumerate(thermal_info['Temperatures']):
         _LOGGER.info("Adding temp %s : %s", i, temp["Name"])
-        async_add_entities([
-            IdracTempSensor(hass, rest_client, device_info, f"{model}_temp_{i}", temp["Name"], i)])
+        entities.append(IdracTempSensor(hass, rest_client, device_info, f"{serial}_{model}_temp_{i}", temp["Name"], i))
+
+    async_add_entities(entities)
 
     async def refresh_sensors_task():
         while True:
