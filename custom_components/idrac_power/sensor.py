@@ -80,9 +80,7 @@ class IdracCurrentPowerSensor(SensorEntity):
             icon='mdi:lightning-bolt',
             native_unit_of_measurement='W',
             device_class=SensorDeviceClass.POWER,
-            state_class=SensorStateClass.MEASUREMENT,
-            device_info=device_info,
-            unique_id=unique_id,
+            state_class=SensorStateClass.MEASUREMENT
         )
 
         self._attr_device_info = device_info
@@ -115,9 +113,7 @@ class IdracFanSensor(SensorEntity):
             name=name,
             icon='mdi:fan',
             native_unit_of_measurement='RPM',
-            state_class=SensorStateClass.MEASUREMENT,
-            device_info=device_info,
-            unique_id=unique_id,
+            state_class=SensorStateClass.MEASUREMENT
         )
 
         self.custom_name = name
@@ -154,8 +150,6 @@ class IdracTempSensor(SensorEntity):
             device_class=SensorDeviceClass.TEMPERATURE,
             state_class=SensorStateClass.MEASUREMENT,
             native_unit_of_measurement='°C',
-            device_info=device_info,
-            unique_id=unique_id,
         )
         self.custom_name = name
 

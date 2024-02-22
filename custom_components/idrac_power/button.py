@@ -53,8 +53,6 @@ class IdracPowerONButton(ButtonEntity):
             name=name,
             icon='mdi:power',
             device_class=ButtonDeviceClass.UPDATE,
-            device_info=device_info,
-            unique_id = unique_id,
         )
 
         self._attr_device_info = device_info
@@ -81,8 +79,6 @@ class IdracRefreshButton(ButtonEntity):
             name=name,
             icon='mdi:power',
             device_class=ButtonDeviceClass.UPDATE,
-            device_info=device_info,
-            unique_id=unique_id,
         )
 
         self._attr_device_info = device_info
