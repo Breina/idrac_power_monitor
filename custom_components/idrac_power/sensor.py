@@ -64,7 +64,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
             await hass.async_add_executor_job(rest_client.update_power_usage)
             await asyncio.sleep(rest_client.interval)
 
-    hass.async_create_background_task(refresh_sensors_task(), "Update iDRAC task")
+    hass.async_create_background_task(refresh_sensors_task(), f"Update {name} iDRAC task")
 
 
 class IdracCurrentPowerSensor(SensorEntity):

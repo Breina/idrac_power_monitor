@@ -38,7 +38,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         name=name,
         manufacturer=manufacturer,
         model=model,
-        sw_version=firmware_version
+        sw_version=firmware_version,
+        serial_number=serial
     )
 
     async_add_entities([
