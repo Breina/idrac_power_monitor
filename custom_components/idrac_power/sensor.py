@@ -24,6 +24,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     """Add iDrac power sensor entry"""
     rest_client = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_REST_CLIENT]
 
+    _LOGGER.debug(f"Getting the REST client for {entry.entry_id}")
+
     # TODO figure out how to properly do async stuff in Python lol
     info = await hass.async_add_executor_job(target=rest_client.get_device_info)
     firmware_version = await hass.async_add_executor_job(target=rest_client.get_firmware_version)
@@ -35,13 +37,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     serial = info[JSON_SERIAL_NUMBER]
 
     device_info = DeviceInfo(
-        identifiers={('domain', DOMAIN), ('model', model), ('serial', serial)},
+        identifiers={('serial', serial)},
         name=name,
         manufacturer=manufacturer,
         model=model,
         sw_version=firmware_version,
         serial_number=serial
     )
+
+    _LOGGER.debug(f"Adding new devices to device info {('serial', serial)}")
 
     entities = [IdracCurrentPowerSensor(hass, rest_client, device_info, f"{serial}_{name}_current", name)]
 
@@ -100,9 +104,7 @@ class IdracCurrentPowerSensor(SensorEntity):
 
 
 class IdracFanSensor(SensorEntity):
-    id = 0
-
-    def __init__(self, hass, rest: IdracRest, device_info, unique_id, name, id):
+    def __init__(self, hass, rest: IdracRest, device_info, unique_id, name, index):
         self.hass = hass
         self.rest = rest
 
@@ -119,19 +121,17 @@ class IdracFanSensor(SensorEntity):
         self._attr_has_entity_name = True
 
         self._attr_native_value = None
-        self.id = id
+        self.index = index
 
         self.rest.register_callback_thermals(self.update_value)
 
     def update_value(self, thermal: dict):
-        self._attr_native_value = thermal['Fans'][self.id]['Reading']
+        self._attr_native_value = thermal['Fans'][self.index]['Reading']
         self.async_schedule_update_ha_state()
 
 
 class IdracTempSensor(SensorEntity):
-    id = 0
-
-    def __init__(self, hass, rest: IdracRest, device_info, unique_id, name, id):
+    def __init__(self, hass, rest: IdracRest, device_info, unique_id, name, index):
         self.hass = hass
         self.rest = rest
 
@@ -148,10 +148,10 @@ class IdracTempSensor(SensorEntity):
         self._attr_unique_id = unique_id
         self._attr_has_entity_name = True
         self._attr_native_value = None
-        self.id = id
+        self.index = index
 
         self.rest.register_callback_thermals(self.update_value)
 
     def update_value(self, thermal: dict):
-        self._attr_native_value = thermal['Temperatures'][self.id]['ReadingCelsius']
+        self._attr_native_value = thermal['Temperatures'][self.index]['ReadingCelsius']
         self.async_schedule_update_ha_state()
