@@ -147,3 +147,69 @@ class InvalidAuth(HomeAssistantError):
 
 class RedfishConfig(HomeAssistantError):
     """Error to indicate that Redfish was not properly configured"""
+
+
+class IdracMock(IdracRest):
+    def __init__(self, host, username, password, interval):
+        super().__init__(host, username, password, interval)
+
+    def get_device_info(self):
+        return {
+            JSON_NAME: "Mock Device",
+            JSON_MANUFACTURER: "Mock Manufacturer",
+            JSON_MODEL: "Mock Model",
+            JSON_SERIAL_NUMBER: "Mock Serial"
+        }
+
+    def get_firmware_version(self):
+        return "1.0.0"
+
+    def power_on(self):
+        return "ON"
+
+    def update_thermals(self) -> dict:
+        new_thermals = {
+            'Fans': [
+                {
+                    'FanName': "First Mock Fan",
+                    'Reading': 1
+                },
+                {
+                    'FanName': "Second Mock Fan",
+                    'Reading': 2
+                }
+            ],
+            'Temperatures': [
+                {
+                    'Name': "Mock Temperature",
+                    'ReadingCelsius': 10
+                }
+            ]
+        }
+
+        if new_thermals != self.thermal_values:
+            self.thermal_values = new_thermals
+            for callback in self.callback_thermals:
+                callback(self.thermal_values)
+        return self.thermal_values
+
+    def update_status(self):
+        new_status = True
+
+        if new_status != self.status:
+            self.status = new_status
+            for callback in self.callback_status:
+                callback(self.status)
+
+    def update_power_usage(self):
+        power_values = {
+            JSON_POWER_CONSUMED_WATTS: 100
+        }
+        try:
+            new_power_usage = power_values[JSON_POWER_CONSUMED_WATTS]
+            if new_power_usage != self.power_usage:
+                self.power_usage = new_power_usage
+                for callback in self.callback_power_usage:
+                    callback(self.power_usage)
+        except:
+            pass
