@@ -37,7 +37,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     serial = info[JSON_SERIAL_NUMBER]
 
     device_info = DeviceInfo(
-        identifiers={('serial', serial)},
+        identifiers={(DOMAIN, serial)},
         name=name,
         manufacturer=manufacturer,
         model=model,
