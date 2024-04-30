@@ -37,7 +37,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     )
 
     async_add_entities([
-        IdracPowerONButton(hass, rest_client, device_info, f"{serial}_{name}_status", name),
+        IdracPowerONButton(hass, rest_client, device_info, f"{serial}_{name}_power_on", name),
         IdracRefreshButton(hass, rest_client, device_info, f"{serial}_{name}_refresh", name)
     ])
 
@@ -70,7 +70,7 @@ class IdracRefreshButton(ButtonEntity):
         self.rest = rest
 
         self.entity_description = ButtonEntityDescription(
-            key='power_on',
+            key='refresh',
             name=f"Refresh {name}",
             icon='mdi:power',
             device_class=ButtonDeviceClass.UPDATE,
