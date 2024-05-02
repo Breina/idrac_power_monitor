@@ -66,10 +66,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     async def refresh_sensors_task():
         while True:
             _LOGGER.debug("Refreshing sensors")
-            await hass.async_add_executor_job(rest_client.update_thermals)
-            await hass.async_add_executor_job(rest_client.update_status)
-            await hass.async_add_executor_job(rest_client.update_power_usage)
+            await update_all()
             await asyncio.sleep(rest_client.interval)
+
+    async def update_all():
+        await hass.async_add_executor_job(rest_client.update_thermals)
+        await hass.async_add_executor_job(rest_client.update_status)
+        await hass.async_add_executor_job(rest_client.update_power_usage)
+
+    await update_all()
 
     hass.async_create_background_task(refresh_sensors_task(), f"Update {name} iDRAC task")
 
@@ -100,7 +105,7 @@ class IdracCurrentPowerSensor(SensorEntity):
 
     def update_value(self, new_value: int):
         self._attr_native_value = new_value
-        self.async_schedule_update_ha_state()
+        self.schedule_update_ha_state()
 
 
 class IdracFanSensor(SensorEntity):
@@ -127,7 +132,7 @@ class IdracFanSensor(SensorEntity):
 
     def update_value(self, thermal: dict):
         self._attr_native_value = thermal['Fans'][self.index]['Reading']
-        self.async_schedule_update_ha_state()
+        self.schedule_update_ha_state()
 
 
 class IdracTempSensor(SensorEntity):
@@ -154,4 +159,4 @@ class IdracTempSensor(SensorEntity):
 
     def update_value(self, thermal: dict):
         self._attr_native_value = thermal['Temperatures'][self.index]['ReadingCelsius']
-        self.async_schedule_update_ha_state()
+        self.schedule_update_ha_state()
