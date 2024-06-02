@@ -2,7 +2,7 @@
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/integration)
 
-This integration will grab infomations from your Dell servers' iDrac system :
+This integration will grab infomations from your Dell servers' iDRAC system :
 
 - Server status
 - Power consumption
