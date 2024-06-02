@@ -13,7 +13,7 @@ Youc can also start the server from Home Assistant.
 
 For this to work, the Redfish service must be running on it.
 
-Tested on iDrac 7 and 8 on multiple Dell PowerEdge servers.
+Tested on iDRAC 7 and 8 on multiple Dell PowerEdge servers.
 
 ## Screenshots
 
