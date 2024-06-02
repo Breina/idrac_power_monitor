@@ -4,6 +4,7 @@ from typing import Callable
 import requests
 import urllib3
 from homeassistant.exceptions import HomeAssistantError
+from requests import Response
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -42,16 +43,21 @@ class IdracRest:
         self.auth = (username, password)
         self.interval = interval
 
-        self.callback_thermals: list[Callable[[dict], None]] = []
-        self.callback_status: list[Callable[[bool], None]] = []
-        self.callback_power_usage: list[Callable[[int], None]] = []
+        self.callback_thermals: list[Callable[[dict | None], None]] = []
+        self.callback_status: list[Callable[[bool | None], None]] = []
+        self.callback_power_usage: list[Callable[[int | None], None]] = []
 
         self.thermal_values: dict = {}
         self.status: bool = False
         self.power_usage: int = 0
 
-    def get_device_info(self):
-        result = self.get_path(drac_chassis_path)
+    def get_device_info(self) -> dict | None:
+        try:
+            result = self.get_path(drac_chassis_path)
+        except ConnectionError:
+            _LOGGER.warning(f"Could not get device info from {self.host}")
+            return None
+
         handle_error(result)
 
         chassis_results = result.json()
@@ -62,8 +68,13 @@ class IdracRest:
             JSON_SERIAL_NUMBER: chassis_results[JSON_SERIAL_NUMBER]
         }
 
-    def get_firmware_version(self):
-        result = self.get_path(drac_managers_path)
+    def get_firmware_version(self) -> str | None:
+        try:
+            result = self.get_path(drac_managers_path)
+        except ConnectionError:
+            _LOGGER.warning(f"Could not get firmware version of {self.host}")
+            return None
+
         handle_error(result)
 
         manager_results = result.json()
@@ -72,9 +83,14 @@ class IdracRest:
     def get_path(self, path):
         return requests.get(protocol + self.host + path, auth=self.auth, verify=False)
 
-    def power_on(self):
-        result = requests.post(protocol + self.host + drac_powerON_path, auth=self.auth, verify=False,
-                               json={"ResetType": "On"})
+    def power_on(self) -> Response | None:
+        try:
+            result = requests.post(protocol + self.host + drac_powerON_path, auth=self.auth, verify=False,
+                                   json={"ResetType": "On"})
+        except ConnectionError as e:
+            _LOGGER.error(f"Could power on {self.host}: {e}")
+            return None
+
         json = result.json()
         if result.status_code == 401:
             raise InvalidAuth()
@@ -89,19 +105,24 @@ class IdracRest:
 
         return result
 
-    def register_callback_thermals(self, callback: Callable[[dict], None]) -> None:
+    def register_callback_thermals(self, callback: Callable[[dict | None], None]) -> None:
         self.callback_thermals.append(callback)
 
-    def register_callback_status(self, callback: Callable[[bool], None]) -> None:
+    def register_callback_status(self, callback: Callable[[bool | None], None]) -> None:
         self.callback_status.append(callback)
 
-    def register_callback_power_usage(self, callback: Callable[[int], None]) -> None:
+    def register_callback_power_usage(self, callback: Callable[[int | None], None]) -> None:
         self.callback_power_usage.append(callback)
 
     def update_thermals(self) -> dict:
-        req = self.get_path(drac_thermals)
-        handle_error(req)
-        new_thermals = req.json()
+        try:
+            req = self.get_path(drac_thermals)
+            handle_error(req)
+            new_thermals = req.json()
+
+        except ConnectionError as e:
+            _LOGGER.warning(f"Couldn't update {self.host} thermals: {e}")
+            new_thermals = None
 
         if new_thermals != self.thermal_values:
             self.thermal_values = new_thermals
@@ -110,12 +131,18 @@ class IdracRest:
         return self.thermal_values
 
     def update_status(self):
-        result = self.get_path(drac_chassis_path)
-        handle_error(result)
-        status_values = result.json()
         try:
-            new_status = status_values[JSON_STATUS][JSON_STATUS_STATE] == 'Enabled'
-        except:
+            result = self.get_path(drac_chassis_path)
+            handle_error(result)
+            status_values = result.json()
+
+            try:
+                new_status = status_values[JSON_STATUS][JSON_STATUS_STATE] == 'Enabled'
+            except:
+                new_status = None
+
+        except ConnectionError as e:
+            _LOGGER.warning(f"Couldn't update {self.host} status: {e}")
             new_status = False
 
         if new_status != self.status:
@@ -124,9 +151,16 @@ class IdracRest:
                 callback(self.status)
 
     def update_power_usage(self):
-        result = self.get_path(drac_powercontrol_path)
-        handle_error(result)
-        power_values = result.json()
+        try:
+            result = self.get_path(drac_powercontrol_path)
+            handle_error(result)
+            power_values = result.json()
+        except ConnectionError as e:
+            _LOGGER.warning(f"Couldn't update {self.host} thermals: {e}")
+            for callback in self.callback_power_usage:
+                callback(None)
+            return
+
         try:
             new_power_usage = power_values[JSON_POWER_CONSUMED_WATTS]
             if new_power_usage != self.power_usage:

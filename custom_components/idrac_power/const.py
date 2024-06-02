@@ -3,6 +3,9 @@ from datetime import timedelta
 DOMAIN = 'idrac_power'
 
 DATA_IDRAC_REST_CLIENT = 'client'
+DATA_IDRAC_INFO = 'info'
+DATA_IDRAC_FIRMWARE = 'firmware'
+DATA_IDRAC_THERMAL = 'thermal'
 
 HOST = 'host'
 USERNAME = 'username'

@@ -9,7 +9,8 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 
-from .const import (DOMAIN, DATA_IDRAC_REST_CLIENT, JSON_MODEL, JSON_MANUFACTURER, JSON_SERIAL_NUMBER)
+from .const import (DOMAIN, DATA_IDRAC_REST_CLIENT, JSON_MODEL, JSON_MANUFACTURER, JSON_SERIAL_NUMBER, DATA_IDRAC_INFO,
+                    DATA_IDRAC_FIRMWARE, DATA_IDRAC_THERMAL)
 from .idrac_rest import IdracRest
 
 _LOGGER = logging.getLogger(__name__)
@@ -26,10 +27,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 
     _LOGGER.debug(f"Getting the REST client for {entry.entry_id}")
 
-    # TODO figure out how to properly do async stuff in Python lol
-    info = await hass.async_add_executor_job(target=rest_client.get_device_info)
+    if DATA_IDRAC_INFO not in hass.data[DOMAIN][entry.entry_id]:
+        info = await hass.async_add_executor_job(target=rest_client.get_device_info)
+        if not info:
+            _LOGGER.error(f"Could not set up: couldn't reach device.")
+            return
+
+        hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_INFO] = info
+    else:
+        info = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_INFO]
+
     firmware_version = await hass.async_add_executor_job(target=rest_client.get_firmware_version)
+    if not firmware_version:
+        if DATA_IDRAC_FIRMWARE in hass.data[DOMAIN][entry.entry_id]:
+            firmware_version = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_FIRMWARE]
+    else:
+        hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_INFO] = firmware_version
+
     thermal_info = await hass.async_add_executor_job(target=rest_client.update_thermals)
+    if not thermal_info:
+        if DATA_IDRAC_THERMAL in hass.data[DOMAIN][entry.entry_id]:
+            thermal_info = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_THERMAL]
+        else:
+            _LOGGER.error(f"Could not set up: couldn't get thermal info.")
+            return
 
     model = info[JSON_MODEL]
     name = model
@@ -103,8 +124,12 @@ class IdracCurrentPowerSensor(SensorEntity):
 
         self.rest.register_callback_power_usage(self.update_value)
 
-    def update_value(self, new_value: int):
-        self._attr_native_value = new_value
+    def update_value(self, new_value: int | None):
+        if new_value:
+            self._attr_native_value = new_value
+            self._attr_available = True
+        else:
+            self._attr_available = False
         self.schedule_update_ha_state()
 
 
@@ -130,8 +155,12 @@ class IdracFanSensor(SensorEntity):
 
         self.rest.register_callback_thermals(self.update_value)
 
-    def update_value(self, thermal: dict):
-        self._attr_native_value = thermal['Fans'][self.index]['Reading']
+    def update_value(self, thermal: dict | None):
+        if thermal:
+            self._attr_native_value = thermal['Fans'][self.index]['Reading']
+            self._attr_available = True
+        else:
+            self._attr_available = False
         self.schedule_update_ha_state()
 
 
@@ -157,6 +186,10 @@ class IdracTempSensor(SensorEntity):
 
         self.rest.register_callback_thermals(self.update_value)
 
-    def update_value(self, thermal: dict):
-        self._attr_native_value = thermal['Temperatures'][self.index]['ReadingCelsius']
+    def update_value(self, thermal: dict | None):
+        if thermal:
+            self._attr_native_value = thermal['Temperatures'][self.index]['ReadingCelsius']
+            self._attr_available = True
+        else:
+            self._attr_available = False
         self.schedule_update_ha_state()

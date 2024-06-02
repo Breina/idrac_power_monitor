@@ -9,7 +9,8 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 
-from .const import (DOMAIN, DATA_IDRAC_REST_CLIENT, JSON_MODEL, JSON_MANUFACTURER, JSON_SERIAL_NUMBER)
+from .const import (DOMAIN, DATA_IDRAC_REST_CLIENT, JSON_MODEL, JSON_MANUFACTURER, JSON_SERIAL_NUMBER,
+                    DATA_IDRAC_FIRMWARE, DATA_IDRAC_INFO)
 from .idrac_rest import IdracRest
 
 _LOGGER = logging.getLogger(__name__)
@@ -24,9 +25,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     """Add iDrac power sensor entry"""
     rest_client = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_REST_CLIENT]
 
-    # TODO figure out how to properly do async stuff in Python lol
-    info = await hass.async_add_executor_job(rest_client.get_device_info)
-    firmware_version = await hass.async_add_executor_job(rest_client.get_firmware_version)
+    if DATA_IDRAC_INFO not in hass.data[DOMAIN][entry.entry_id]:
+        info = await hass.async_add_executor_job(target=rest_client.get_device_info)
+        if not info:
+            _LOGGER.error(f"Could not set up: couldn't reach device.")
+            return
+
+        hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_INFO] = info
+    else:
+        info = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_INFO]
+
+    firmware_version = await hass.async_add_executor_job(target=rest_client.get_firmware_version)
+    if not firmware_version:
+        if DATA_IDRAC_FIRMWARE in hass.data[DOMAIN][entry.entry_id]:
+            firmware_version = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_FIRMWARE]
+    else:
+        hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_INFO] = firmware_version
 
     model = info[JSON_MODEL]
     name = model
@@ -74,6 +88,10 @@ class IdracStatusBinarySensor(BinarySensorEntity):
         """Name of the entity."""
         return "Server Status"
 
-    def update_value(self, status: bool):
-        self._attr_is_on = status
+    def update_value(self, status: bool | None):
+        if status:
+            self._attr_is_on = status
+            self._attr_available = True
+        else:
+            self._attr_available = False
         self.schedule_update_ha_state()
