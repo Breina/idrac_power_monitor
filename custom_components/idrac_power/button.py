@@ -7,10 +7,11 @@ from homeassistant.components.button import ButtonEntity, ButtonEntityDescriptio
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.exceptions import PlatformNotReady
 
 from .const import (DOMAIN, DATA_IDRAC_REST_CLIENT, JSON_MODEL, JSON_MANUFACTURER, JSON_SERIAL_NUMBER, DATA_IDRAC_INFO,
                     DATA_IDRAC_FIRMWARE)
-from .idrac_rest import IdracRest
+from .idrac_rest import IdracRest, CannotConnect, RedfishConfig
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -19,22 +20,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     """Add iDrac power sensor entry"""
     rest_client = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_REST_CLIENT]
 
-    if DATA_IDRAC_INFO not in hass.data[DOMAIN][entry.entry_id]:
-        info = await hass.async_add_executor_job(target=rest_client.get_device_info)
-        if not info:
-            _LOGGER.error(f"Could not set up: couldn't reach device.")
-            return
+    try:
+        if DATA_IDRAC_INFO not in hass.data[DOMAIN][entry.entry_id]:
+            info = await hass.async_add_executor_job(target=rest_client.get_device_info)
+            if not info:
+                raise PlatformNotReady(f"Could not set up: device didn't return anything.")
 
-        hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_INFO] = info
-    else:
-        info = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_INFO]
+            hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_INFO] = info
+        else:
+            info = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_INFO]
 
-    firmware_version = await hass.async_add_executor_job(target=rest_client.get_firmware_version)
-    if not firmware_version:
-        if DATA_IDRAC_FIRMWARE in hass.data[DOMAIN][entry.entry_id]:
-            firmware_version = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_FIRMWARE]
-    else:
-        hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_INFO] = firmware_version
+        firmware_version = await hass.async_add_executor_job(target=rest_client.get_firmware_version)
+        if not firmware_version:
+            if DATA_IDRAC_FIRMWARE in hass.data[DOMAIN][entry.entry_id]:
+                firmware_version = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_FIRMWARE]
+        else:
+            hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_INFO] = firmware_version
+    except (CannotConnect, RedfishConfig) as e:
+        raise PlatformNotReady(str(e)) from e
 
     model = info[JSON_MODEL]
     name = model
