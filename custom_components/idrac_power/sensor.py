@@ -8,10 +8,11 @@ from homeassistant.components.sensor import SensorEntity, SensorEntityDescriptio
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.exceptions import PlatformNotReady
 
 from .const import (DOMAIN, DATA_IDRAC_REST_CLIENT, JSON_MODEL, JSON_MANUFACTURER, JSON_SERIAL_NUMBER, DATA_IDRAC_INFO,
                     DATA_IDRAC_FIRMWARE, DATA_IDRAC_THERMAL)
-from .idrac_rest import IdracRest
+from .idrac_rest import IdracRest, CannotConnect, RedfishConfig
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,30 +28,31 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 
     _LOGGER.debug(f"Getting the REST client for {entry.entry_id}")
 
-    if DATA_IDRAC_INFO not in hass.data[DOMAIN][entry.entry_id]:
-        info = await hass.async_add_executor_job(target=rest_client.get_device_info)
-        if not info:
-            _LOGGER.error(f"Could not set up: couldn't reach device.")
-            return
+    try:
+        if DATA_IDRAC_INFO not in hass.data[DOMAIN][entry.entry_id]:
+            info = await hass.async_add_executor_job(target=rest_client.get_device_info)
+            if not info:
+                raise PlatformNotReady(f"Could not set up: device didn't return anything.")
 
-        hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_INFO] = info
-    else:
-        info = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_INFO]
-
-    firmware_version = await hass.async_add_executor_job(target=rest_client.get_firmware_version)
-    if not firmware_version:
-        if DATA_IDRAC_FIRMWARE in hass.data[DOMAIN][entry.entry_id]:
-            firmware_version = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_FIRMWARE]
-    else:
-        hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_INFO] = firmware_version
-
-    thermal_info = await hass.async_add_executor_job(target=rest_client.update_thermals)
-    if not thermal_info:
-        if DATA_IDRAC_THERMAL in hass.data[DOMAIN][entry.entry_id]:
-            thermal_info = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_THERMAL]
+            hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_INFO] = info
         else:
-            _LOGGER.error(f"Could not set up: couldn't get thermal info.")
-            return
+            info = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_INFO]
+
+        firmware_version = await hass.async_add_executor_job(target=rest_client.get_firmware_version)
+        if not firmware_version:
+            if DATA_IDRAC_FIRMWARE in hass.data[DOMAIN][entry.entry_id]:
+                firmware_version = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_FIRMWARE]
+        else:
+            hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_INFO] = firmware_version
+
+        thermal_info = await hass.async_add_executor_job(target=rest_client.update_thermals)
+        if not thermal_info:
+            if DATA_IDRAC_THERMAL in hass.data[DOMAIN][entry.entry_id]:
+                thermal_info = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_THERMAL]
+            else:
+                raise PlatformNotReady(f"Could not set up: couldn't get thermal info.")
+    except (CannotConnect, RedfishConfig) as e:
+        raise PlatformNotReady(str(e)) from e
 
     model = info[JSON_MODEL]
     name = model
@@ -68,17 +70,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 
     _LOGGER.debug(f"Adding new devices to device info {('serial', serial)}")
 
-    entities = [IdracCurrentPowerSensor(hass, rest_client, device_info, f"{serial}_{name}_current", name)]
+    entities = [IdracCurrentPowerSensor(hass, rest_client, device_info, f"{serial}_{name}_power", name)]
 
     for i, fan in enumerate(thermal_info['Fans']):
         _LOGGER.info("Adding fan %s : %s", i, fan["FanName"])
-        entities.append(IdracFanSensor(hass, rest_client, device_info, f"{serial}_{name}_fan_{i}",
+        entities.append(IdracFanSensor(hass, rest_client, device_info, f"{serial}_{name}_fan_{fan['FanName'].lower().replace(" ", "_")}",
                                        f"{name} {fan['FanName']}", i
                                        ))
 
     for i, temp in enumerate(thermal_info['Temperatures']):
         _LOGGER.info("Adding temp %s : %s", i, temp["Name"])
-        entities.append(IdracTempSensor(hass, rest_client, device_info, f"{serial}_{name}_temp_{i}",
+        entities.append(IdracTempSensor(hass, rest_client, device_info, f"{serial}_{name}_temp_{temp['Name'].lower().replace(" ", "_")}",
                                         f"{name} {temp['Name']}", i
                                         ))
 
