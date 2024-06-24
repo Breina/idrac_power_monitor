@@ -126,8 +126,6 @@ class IdracRest:
             _LOGGER.debug(f"Couldn't update {self.host} thermals: {e}")
             new_thermals = None
 
-        _LOGGER.warning(new_thermals)
-
         if new_thermals != self.thermal_values:
             self.thermal_values = new_thermals
             for callback in self.callback_thermals:
