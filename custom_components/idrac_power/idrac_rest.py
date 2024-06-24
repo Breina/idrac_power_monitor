@@ -5,7 +5,7 @@ import requests
 import urllib3
 from homeassistant.exceptions import HomeAssistantError
 from requests import Response
-from requests.exceptions import ConnectionError, JSONDecodeError
+from requests.exceptions import RequestException, JSONDecodeError
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -59,7 +59,7 @@ class IdracRest:
     def get_device_info(self) -> dict | None:
         try:
             result = self.get_path(drac_chassis_path)
-        except ConnectionError:
+        except RequestException:
             raise CannotConnect(f"Cannot connect to {self.host}")
 
         handle_error(result)
@@ -75,7 +75,7 @@ class IdracRest:
     def get_firmware_version(self) -> str | None:
         try:
             result = self.get_path(drac_managers_path)
-        except ConnectionError:
+        except RequestException:
             raise CannotConnect(f"Could not get firmware version of {self.host}")
 
         handle_error(result)
@@ -84,13 +84,13 @@ class IdracRest:
         return manager_results[JSON_FIRMWARE_VERSION]
 
     def get_path(self, path):
-        return requests.get(protocol + self.host + path, auth=self.auth, verify=False)
+        return requests.get(protocol + self.host + path, auth=self.auth, verify=False, timeout=300)
 
     def power_on(self) -> Response | None:
         try:
             result = requests.post(protocol + self.host + drac_powerON_path, auth=self.auth, verify=False,
-                                   json={"ResetType": "On"})
-        except ConnectionError as e:
+                                   json={"ResetType": "On"}, timeout=300)
+        except RequestException as e:
             raise CannotConnect(f"Could not power on {self.host}: {e}")
 
         json = result.json()
@@ -122,7 +122,7 @@ class IdracRest:
             handle_error(req)
             new_thermals = req.json()
 
-        except (ConnectionError, RedfishConfig, CannotConnect) as e:
+        except (RequestException, RedfishConfig, CannotConnect) as e:
             _LOGGER.debug(f"Couldn't update {self.host} thermals: {e}")
             new_thermals = None
 
@@ -143,9 +143,9 @@ class IdracRest:
             except:
                 new_status = None
 
-        except (ConnectionError, RedfishConfig, CannotConnect) as e:
+        except (RequestException, RedfishConfig, CannotConnect) as e:
             _LOGGER.debug(f"Couldn't update {self.host} status: {e}")
-            new_status = False
+            new_status = None
 
         if new_status != self.status:
             self.status = new_status
@@ -157,7 +157,7 @@ class IdracRest:
             result = self.get_path(drac_powercontrol_path)
             handle_error(result)
             power_values = result.json()
-        except (ConnectionError, RedfishConfig, CannotConnect) as e:
+        except (RequestException, RedfishConfig, CannotConnect) as e:
             _LOGGER.debug(f"Couldn't update {self.host} power usage: {e}")
             for callback in self.callback_power_usage:
                 callback(None)
