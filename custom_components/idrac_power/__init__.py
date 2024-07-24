@@ -1,4 +1,4 @@
-"""iDrac power usage monitor"""
+"""iDRAC power usage monitor"""
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
@@ -9,7 +9,7 @@ from .idrac_rest import IdracMock, IdracRest
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up the iDrac connection from a config entry."""
+    """Set up the iDRAC connection from a config entry."""
 
     if entry.data[HOST] == 'MOCK':
         hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {

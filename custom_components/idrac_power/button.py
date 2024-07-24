@@ -1,4 +1,4 @@
-"""Platform for iDrac power sensor integration."""
+"""Platform for iDRAC power sensor integration."""
 from __future__ import annotations
 
 import logging
@@ -17,7 +17,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
-    """Add iDrac power sensor entry"""
+    """Add iDRAC power sensor entry"""
     rest_client = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_REST_CLIENT]
 
     try:
