@@ -1,0 +1,24 @@
+{
+  "title": "Moniteur de puissance iDRAC",
+  "config": {
+    "step": {
+      "user": {
+        "data": {
+          "host": "Nom d'hôte de l'instance iDRAC",
+          "username": "Nom d'utilisateur iDRAC",
+          "password": "Mot de passe iDRAC",
+          "interval": "Intervalle en secondes entre chaque sondage"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Impossible de se connecter",
+      "invalid_auth": "Informations d'identification invalides",
+      "redfish_config": "Redfish n'est pas activé. Démarrez l'interface iDRAC avec un navigateur Web et accédez à la page Serveur -> iDRAC Settings -> Network -> Services -> Redfish. Vérifiez que Enabled est sélectionné.",
+      "unknown": "Erreur inconnue"
+    },
+    "abort": {
+      "already_configured": "Cette intégration a déjà été configurée"
+    }
+  }
+}
