@@ -1,12 +1,12 @@
 {
-  "title": "iDrac power monitor",
+  "title": "iDRAC power monitor",
   "config": {
     "step": {
       "user": {
         "data": {
-          "host": "Hostnaam van de iDrac instantie",
-          "username": "iDrac gebruikersnaam",
-          "password": "iDrac wachtwoord",
+          "host": "Hostnaam van de iDRAC instantie",
+          "username": "iDRAC gebruikersnaam",
+          "password": "iDRAC wachtwoord",
           "interval": "Interval in seconden tussen elke update"
         }
       }

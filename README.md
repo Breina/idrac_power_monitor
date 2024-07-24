@@ -1,4 +1,4 @@
-# iDrac power monitor
+# iDRAC power monitor
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/integration)
 
@@ -26,5 +26,5 @@ Tested on iDRAC 7 and 8 on multiple Dell PowerEdge servers.
 2. Restart HA
 3. Go to `Configuration` -> `Integrations` and click the `+ Add Integration`
    button
-4. Select `iDrac power monitor` from the list
-5. Enter the IP address or hostname (NO `http://` !) of your iDrac instance, its username (`root` by default) and its password (`calvin` by default).
+4. Select `iDRAC power monitor` from the list
+5. Enter the IP address or hostname (NO `http://` !) of your iDRAC instance, its username (`root` by default) and its password (`calvin` by default).

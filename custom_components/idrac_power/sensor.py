@@ -1,4 +1,4 @@
-"""Platform for iDrac power sensor integration."""
+"""Platform for iDRAC power sensor integration."""
 from __future__ import annotations
 
 import asyncio
@@ -23,7 +23,7 @@ drac_powercontrol_path = '/redfish/v1/Chassis/System.Embedded.1/Power/PowerContr
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
-    """Add iDrac power sensor entry"""
+    """Add iDRAC power sensor entry"""
     rest_client = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_REST_CLIENT]
 
     _LOGGER.debug(f"Getting the REST client for {entry.entry_id}")
@@ -119,7 +119,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 
 
 class IdracCurrentPowerSensor(SensorEntity):
-    """The iDrac's current power sensor entity."""
+    """The iDRAC's current power sensor entity."""
 
     def __init__(self, hass, rest: IdracRest, device_info, unique_id, name):
         self.hass = hass

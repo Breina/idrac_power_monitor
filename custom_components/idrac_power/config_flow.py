@@ -1,4 +1,4 @@
-"""Config flow for the iDrac power usage monitor"""
+"""Config flow for the iDRAC power usage monitor"""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
 
 @config_entries.HANDLERS.register(DOMAIN)
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for iDrac REST."""
+    """Handle a config flow for iDRAC REST."""
 
     VERSION = 1
 

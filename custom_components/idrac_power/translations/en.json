@@ -1,12 +1,12 @@
 {
-  "title": "iDrac power monitor",
+  "title": "iDRAC power monitor",
   "config": {
     "step": {
       "user": {
         "data": {
-          "host": "Hostname of the iDrac instance",
-          "username": "iDrac username",
-          "password": "iDrac password",
+          "host": "Hostname of the iDRAC instance",
+          "username": "iDRAC username",
+          "password": "iDRAC password",
           "interval": "Interval in seconds between each poll"
         }
       }
