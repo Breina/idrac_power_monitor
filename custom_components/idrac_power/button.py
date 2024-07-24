@@ -80,6 +80,7 @@ class IdracPowerONButton(ButtonEntity):
     async def async_press(self) -> None:
         await self.hass.async_add_executor_job(self.rest.idrac_reset, 'On')
 
+
 class IdracPowerOffButton(ButtonEntity):
 
     def __init__(self, hass, rest: IdracRest, device_info, unique_id, name):

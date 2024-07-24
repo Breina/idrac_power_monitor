@@ -6,13 +6,12 @@ import urllib3
 from homeassistant.exceptions import HomeAssistantError
 from requests import Response
 from requests.exceptions import RequestException, JSONDecodeError, HTTPError
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
 from .const import (
     JSON_NAME, JSON_MANUFACTURER, JSON_MODEL, JSON_SERIAL_NUMBER,
     JSON_POWER_CONSUMED_WATTS, JSON_FIRMWARE_VERSION, JSON_STATUS, JSON_STATUS_STATE
 )
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -89,7 +88,7 @@ class IdracRest:
     def idrac_reset(self, reset_type: str) -> Response | None:
         '''
         reset_type (str): On, ForceOff, ForceRestart, GracefulShutdown, PushPowerButton, Nmi
-            Following types of reset can be performed: 
+            Following types of reset can be performed:
                 - On: Turn on the unit.
                 - ForceOff: Turn off the unit immediately (nongraceful shutdown).
                 - ForceRestart: Shut down immediately and nongracefully and restart the system.
@@ -101,13 +100,13 @@ class IdracRest:
         '''
         try:
             response = requests.post(url=f'{protocol}{self.host}{drac_reset_path}',
-                                   auth=self.auth,
-                                   verify=False,
-                                   json={"ResetType": reset_type},
-                                   timeout=300)
+                                     auth=self.auth,
+                                     verify=False,
+                                     json={"ResetType": reset_type},
+                                     timeout=300)
         except RequestException as e:
             raise CannotConnect(f"Could not perform '{reset_type}' iDRAC reset on {self.host}: {e}")
-    
+
         json = None
         status_code = response.status_code
         if status_code == 204:
@@ -116,7 +115,8 @@ class IdracRest:
         elif status_code == 401 or status_code == 403:
             raise InvalidAuth()
         elif status_code == 404:
-            if response.json().get('error', {}).get('code') == 'Base.1.0.GeneralError' and 'RedFish attribute is disabled' in \
+            error = response.json()['error']
+            if error.get('code') == 'Base.1.0.GeneralError' and 'RedFish attribute is disabled' in \
                     error['@Message.ExtendedInfo'][0]['Message']:
                 raise RedfishConfig()
             raise HTTPError()
@@ -137,7 +137,6 @@ class IdracRest:
             _LOGGER.error(f"iDRAC '{reset_type}' iDRAC reset failed: {error_message}")
 
         return response
-
 
     def register_callback_thermals(self, callback: Callable[[dict | None], None]) -> None:
         self.callback_thermals.append(callback)
