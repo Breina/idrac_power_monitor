@@ -9,7 +9,7 @@ This integration will grab infomations from your Dell servers' iDRAC system :
 - CPU and air temperature
 - Fan speed
 
-Youc can also start the server from Home Assistant.
+You can also start and shutdown the server from Home Assistant.
 
 For this to work, the Redfish service must be running on it.
 

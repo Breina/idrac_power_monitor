@@ -30,7 +30,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         if DATA_IDRAC_INFO not in hass.data[DOMAIN][entry.entry_id]:
             info = await hass.async_add_executor_job(target=rest_client.get_device_info)
             if not info:
-                raise PlatformNotReady(f"Could not set up: device didn't return anything.")
+                raise PlatformNotReady("Could not set up: device didn't return anything.")
 
             hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_INFO] = info
         else:
@@ -44,7 +44,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
             hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_INFO] = firmware_version
     except (CannotConnect, RedfishConfig) as e:
         raise PlatformNotReady(str(e)) from e
-
 
     model = info[JSON_MODEL]
     name = model
