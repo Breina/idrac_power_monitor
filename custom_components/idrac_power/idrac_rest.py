@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import Callable
 
 import requests
@@ -219,6 +220,7 @@ class RedfishConfig(HomeAssistantError):
 class IdracMock(IdracRest):
     def __init__(self, host, username, password, interval):
         super().__init__(host, username, password, interval)
+        self.is_on = True
 
     def get_device_info(self):
         return {
@@ -231,23 +233,34 @@ class IdracMock(IdracRest):
     def get_firmware_version(self):
         return "1.0.0"
 
-    def power_on(self):
-        return "ON"
+    def idrac_reset(self, reset_type: str) -> Response | None:
+        if reset_type == 'On':
+            self.status = True
+        elif reset_type == 'GracefulShutdown':
+            self.status = False
+
+        time.sleep(3)
+        self.update_status()
+
+        return None
 
     def update_thermals(self) -> dict:
         new_thermals = {
             'Fans': [
                 {
+                    'MemberId': "MemberID 1",
                     'FanName': "First Mock Fan",
                     'Reading': 1
                 },
                 {
+                    'MemberId': "MemberID 2",
                     'FanName': "Second Mock Fan",
                     'Reading': 2
                 }
             ],
             'Temperatures': [
                 {
+                    'MemberId': "MemberID 3",
                     'Name': "Mock Temperature",
                     'ReadingCelsius': 10
                 }
@@ -261,12 +274,8 @@ class IdracMock(IdracRest):
         return self.thermal_values
 
     def update_status(self):
-        new_status = True
-
-        if new_status != self.status:
-            self.status = new_status
-            for callback in self.callback_status:
-                callback(self.status)
+        for callback in self.callback_status:
+            callback(self.status)
 
     def update_power_usage(self):
         power_values = {

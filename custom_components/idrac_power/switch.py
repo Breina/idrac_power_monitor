@@ -1,13 +1,14 @@
-"""Platform for iDrac power button integration."""
+"""Platform for iDrac power switch integration."""
 from __future__ import annotations
 
 import logging
+from typing import Any
 
-from homeassistant.components.button import ButtonEntity, ButtonEntityDescription, ButtonDeviceClass
+from homeassistant.components.switch import SwitchEntity, SwitchEntityDescription, SwitchDeviceClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.exceptions import PlatformNotReady
+from homeassistant.helpers.entity import DeviceInfo
 
 from .const import (DOMAIN, DATA_IDRAC_REST_CLIENT, JSON_MODEL, JSON_MANUFACTURER, JSON_SERIAL_NUMBER, DATA_IDRAC_INFO,
                     DATA_IDRAC_FIRMWARE)
@@ -54,73 +55,34 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     )
 
     async_add_entities([
-        IdracPowerONButton(hass, rest_client, device_info, f"{serial}_{name}_power_on", name),
-        IdracPowerOffButton(hass, rest_client, device_info, f"{serial}_{name}_power_off", name),
-        IdracRefreshButton(hass, rest_client, device_info, f"{serial}_{name}_refresh", name)
+        IdracPowerSwitch(hass, rest_client, device_info, f"{serial}_{name}_power_on", name)
     ])
 
 
-class IdracPowerONButton(ButtonEntity):
-
-    def __init__(self, hass, rest: IdracRest, device_info, unique_id, name):
+class IdracPowerSwitch(SwitchEntity):
+    def __init__(self, hass: HomeAssistant, rest: IdracRest, device_info: dict, unique_id: str, name: str):
         self.hass = hass
         self.rest = rest
 
-        self.entity_description = ButtonEntityDescription(
-            key='power_on',
-            name=f"Power on {name}",
+        self.entity_description = SwitchEntityDescription(
+            key='power',
+            name=f"Power {name}",
             icon='mdi:power',
-            device_class=ButtonDeviceClass.UPDATE,
+            device_class=SwitchDeviceClass.SWITCH
         )
 
         self._attr_device_info = device_info
         self._attr_unique_id = unique_id
         self._attr_has_entity_name = True
 
-    async def async_press(self) -> None:
+        self.rest.register_callback_status(self.update_value)
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
         await self.hass.async_add_executor_job(self.rest.idrac_reset, 'On')
 
-
-class IdracPowerOffButton(ButtonEntity):
-
-    def __init__(self, hass, rest: IdracRest, device_info, unique_id, name):
-        self.hass = hass
-        self.rest = rest
-
-        self.entity_description = ButtonEntityDescription(
-            key='power_on',
-            name=f"Power OFF {name}",
-            icon='mdi:power',
-            device_class=ButtonDeviceClass.UPDATE,
-        )
-
-        self._attr_device_info = device_info
-        self._attr_unique_id = unique_id
-        self._attr_has_entity_name = True
-
-    async def async_press(self) -> None:
+    async def async_turn_off(self, **kwargs: Any) -> None:
         await self.hass.async_add_executor_job(self.rest.idrac_reset, 'GracefulShutdown')
 
-
-class IdracRefreshButton(ButtonEntity):
-
-    def __init__(self, hass, rest: IdracRest, device_info, unique_id, name):
-        self.hass = hass
-        self.rest = rest
-
-        self.entity_description = ButtonEntityDescription(
-            key='refresh',
-            name=f"Refresh {name}",
-            icon='mdi:power',
-            device_class=ButtonDeviceClass.UPDATE,
-        )
-
-        self._attr_device_info = device_info
-        self._attr_unique_id = unique_id
-        self._attr_has_entity_name = True
-
-    async def async_press(self) -> None:
-        _LOGGER.info("Refreshing sensors manually")
-        await self.hass.async_add_executor_job(self.rest.update_thermals)
-        await self.hass.async_add_executor_job(self.rest.update_status)
-        await self.hass.async_add_executor_job(self.rest.update_power_usage)
+    def update_value(self, status: bool | None):
+        self._attr_is_on = status
+        self.schedule_update_ha_state()
