@@ -1,6 +1,8 @@
 # iDRAC power monitor
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/integration)
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/Breina/idrac_power_monitor/validate.yaml)
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/Breina/idrac_power_monitor/hassfest.yaml)
 
 This integration will grab infomations from your Dell servers' iDRAC system :
 
@@ -19,12 +21,20 @@ Tested on iDRAC 7 and 8 on multiple Dell PowerEdge servers.
 
 ![Alt text](imgs/entities.png)
 
+
 ## Installation
 
-1. Install this integration with HACS, or copy the contents of this
-   repository into the `custom_components/idrac_power` directory
-2. Restart HA
-3. Go to `Configuration` -> `Integrations` and click the `+ Add Integration`
+> **Note**
+> 
+> This integration requires [HACS](https://github.com/hacs/integration) to be installed
+
+1. Open HACS
+2. `+ EXPLORE & DOWNLOAD REPOSITORIES`
+3. Find `iDRAC power monitor` in this list
+4. `DOWNLOAD THIS REPOSITORY WITH HACS`
+5. `DOWNLOAD`
+6. Restart Home Assistant (_Settings_ > _System_ > _RESTART_)
+7. Go to `Configuration` -> `Integrations` and click the `+ Add Integration`
    button
-4. Select `iDRAC power monitor` from the list
-5. Enter the IP address or hostname (NO `http://` !) of your iDRAC instance, its username (`root` by default) and its password (`calvin` by default).
+8. Select `iDRAC power monitor` from the list
+9. Enter the IP address or hostname (NO `http://` !) of your iDRAC instance, its username (`root` by default) and its password (`calvin` by default).
