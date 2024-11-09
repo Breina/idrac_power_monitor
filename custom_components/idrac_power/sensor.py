@@ -88,35 +88,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 
     async_add_entities(entities)
 
-    async def refresh_sensors_task():
-        while True:
-            _LOGGER.debug("Refreshing sensors")
-            await update_all()
-            await asyncio.sleep(rest_client.interval)
-
-    async def update_all():
-        try:
-            await hass.async_add_executor_job(rest_client.update_thermals)
-        except Exception as e:
-            # ignore exceptions, just log the error
-            _LOGGER.warning(f"Updating {name} thermals sensors failed:\n{e}")
-
-        try:
-            await hass.async_add_executor_job(rest_client.update_status)
-        except Exception as e:
-            # ignore exceptions, just log the error
-            _LOGGER.warning(f"Updating {name} status sensor failed:\n{e}")
-
-        try:
-            await hass.async_add_executor_job(rest_client.update_power_usage)
-        except Exception as e:
-            # ignore exceptions, just log the error
-            _LOGGER.warning(f"Updating {name} power usage failed:\n{e}")
-
-    await update_all()
-
-    hass.async_create_background_task(refresh_sensors_task(), f"Update {name} iDRAC task")
-
 
 class IdracCurrentPowerSensor(SensorEntity):
     """The iDRAC's current power sensor entity."""

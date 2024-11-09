@@ -1,18 +1,18 @@
 import logging
+import time
 from typing import Callable
 
 import requests
 import urllib3
 from homeassistant.exceptions import HomeAssistantError
 from requests import Response
-from requests.exceptions import RequestException, JSONDecodeError
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
+from requests.exceptions import RequestException, JSONDecodeError, HTTPError
 from .const import (
     JSON_NAME, JSON_MANUFACTURER, JSON_MODEL, JSON_SERIAL_NUMBER,
     JSON_POWER_CONSUMED_WATTS, JSON_FIRMWARE_VERSION, JSON_STATUS, JSON_STATUS_STATE
 )
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ protocol = 'https://'
 drac_managers_path = '/redfish/v1/Managers/iDRAC.Embedded.1'
 drac_chassis_path = '/redfish/v1/Chassis/System.Embedded.1'
 drac_powercontrol_path = '/redfish/v1/Chassis/System.Embedded.1/Power/PowerControl'
-drac_powerON_path = '/redfish/v1/Systems/System.Embedded.1/Actions/ComputerSystem.Reset'
+drac_reset_path = '/redfish/v1/Systems/System.Embedded.1/Actions/ComputerSystem.Reset'
 drac_thermals = '/redfish/v1/Chassis/System.Embedded.1/Thermal'
 
 
@@ -86,26 +86,58 @@ class IdracRest:
     def get_path(self, path):
         return requests.get(protocol + self.host + path, auth=self.auth, verify=False, timeout=300)
 
-    def power_on(self) -> Response | None:
+    def idrac_reset(self, reset_type: str) -> Response | None:
+        '''
+        reset_type (str): On, ForceOff, ForceRestart, GracefulShutdown, PushPowerButton, Nmi
+            Following types of reset can be performed:
+                - On: Turn on the unit.
+                - ForceOff: Turn off the unit immediately (nongraceful shutdown).
+                - ForceRestart: Shut down immediately and nongracefully and restart the system.
+                - GracefulShutdown: Shut down gracefully and power off.
+                - PushPowerButton: Simulate the pressing of the physical power button on the unit
+                - Nmi: Generate a diagnostic interrupt, which is usually an NMI on x86 systems,
+                       to stop normal operations, complete diagnostic actions,
+                       and typically, terminate all the processes running in the system.
+        '''
         try:
-            result = requests.post(protocol + self.host + drac_powerON_path, auth=self.auth, verify=False,
-                                   json={"ResetType": "On"}, timeout=300)
+            response = requests.post(url=f'{protocol}{self.host}{drac_reset_path}',
+                                     auth=self.auth,
+                                     verify=False,
+                                     json={"ResetType": reset_type},
+                                     timeout=300)
         except RequestException as e:
-            raise CannotConnect(f"Could not power on {self.host}: {e}")
+            raise CannotConnect(f"Could not perform '{reset_type}' iDRAC reset on {self.host}: {e}")
 
-        json = result.json()
-        if result.status_code == 401:
+        json = None
+        status_code = response.status_code
+        if status_code == 204:
+            json = {}
+            _LOGGER.info(f"Sucessfully performed '{reset_type}' iDRAC reset on {self.host}.")
+        elif status_code == 401 or status_code == 403:
             raise InvalidAuth()
-
-        if result.status_code == 404:
-            error = result.json()['error']
-            if error['code'] == 'Base.1.0.GeneralError' and 'RedFish attribute is disabled' in \
+        elif status_code == 404:
+            error = response.json()['error']
+            if error.get('code') == 'Base.1.0.GeneralError' and 'RedFish attribute is disabled' in \
                     error['@Message.ExtendedInfo'][0]['Message']:
                 raise RedfishConfig()
-        if "error" in json:
-            _LOGGER.error("iDRAC power on failed: %s", json["error"]["@Message.ExtendedInfo"][0]["Message"])
+            raise HTTPError()
+        elif status_code == 409:  # A 409 will be returned if you try to turn On a running server.
+            json = {}
+            _LOGGER.info(f"Could not perform '{reset_type}' iDRAC reset on {self.host}: {response.text}")
+        elif status_code >= 400:
+            _LOGGER.error(f"Could not perform '{reset_type}' iDRAC reset on {self.host}: {response.text}")
 
-        return result
+        if json is None:
+            try:
+                json = response.json()
+            except JSONDecodeError:
+                _LOGGER.warning(f'JSONDecodeError {status_code} {response.text}')
+
+        if "error" in json:
+            error_message = json["error"]["@Message.ExtendedInfo"][0]["Message"]
+            _LOGGER.error(f"iDRAC '{reset_type}' iDRAC reset failed: {error_message}")
+
+        return response
 
     def register_callback_thermals(self, callback: Callable[[dict | None], None]) -> None:
         self.callback_thermals.append(callback)
@@ -188,6 +220,7 @@ class RedfishConfig(HomeAssistantError):
 class IdracMock(IdracRest):
     def __init__(self, host, username, password, interval):
         super().__init__(host, username, password, interval)
+        self.is_on = True
 
     def get_device_info(self):
         return {
@@ -200,23 +233,34 @@ class IdracMock(IdracRest):
     def get_firmware_version(self):
         return "1.0.0"
 
-    def power_on(self):
-        return "ON"
+    def idrac_reset(self, reset_type: str) -> Response | None:
+        if reset_type == 'On':
+            self.status = True
+        elif reset_type == 'GracefulShutdown':
+            self.status = False
+
+        time.sleep(3)
+        self.update_status()
+
+        return None
 
     def update_thermals(self) -> dict:
         new_thermals = {
             'Fans': [
                 {
+                    'MemberId': "MemberID 1",
                     'FanName': "First Mock Fan",
                     'Reading': 1
                 },
                 {
+                    'MemberId': "MemberID 2",
                     'FanName': "Second Mock Fan",
                     'Reading': 2
                 }
             ],
             'Temperatures': [
                 {
+                    'MemberId': "MemberID 3",
                     'Name': "Mock Temperature",
                     'ReadingCelsius': 10
                 }
@@ -230,12 +274,8 @@ class IdracMock(IdracRest):
         return self.thermal_values
 
     def update_status(self):
-        new_status = True
-
-        if new_status != self.status:
-            self.status = new_status
-            for callback in self.callback_status:
-                callback(self.status)
+        for callback in self.callback_status:
+            callback(self.status)
 
     def update_power_usage(self):
         power_values = {

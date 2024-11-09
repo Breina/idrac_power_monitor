@@ -1,4 +1,4 @@
-"""Platform for iDRAC power sensor integration."""
+"""Platform for iDRAC power button integration."""
 from __future__ import annotations
 
 import logging
@@ -24,7 +24,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         if DATA_IDRAC_INFO not in hass.data[DOMAIN][entry.entry_id]:
             info = await hass.async_add_executor_job(target=rest_client.get_device_info)
             if not info:
-                raise PlatformNotReady(f"Could not set up: device didn't return anything.")
+                raise PlatformNotReady("Could not set up: device didn't return anything.")
 
             hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_INFO] = info
         else:
@@ -55,6 +55,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 
     async_add_entities([
         IdracPowerONButton(hass, rest_client, device_info, f"{serial}_{name}_power_on", name),
+        IdracPowerOffButton(hass, rest_client, device_info, f"{serial}_{name}_power_off", name),
         IdracRefreshButton(hass, rest_client, device_info, f"{serial}_{name}_refresh", name)
     ])
 
@@ -77,7 +78,28 @@ class IdracPowerONButton(ButtonEntity):
         self._attr_has_entity_name = True
 
     async def async_press(self) -> None:
-        await self.hass.async_add_executor_job(self.rest.power_on)
+        await self.hass.async_add_executor_job(self.rest.idrac_reset, 'On')
+
+
+class IdracPowerOffButton(ButtonEntity):
+
+    def __init__(self, hass, rest: IdracRest, device_info, unique_id, name):
+        self.hass = hass
+        self.rest = rest
+
+        self.entity_description = ButtonEntityDescription(
+            key='power_on',
+            name=f"Power OFF {name}",
+            icon='mdi:power',
+            device_class=ButtonDeviceClass.UPDATE,
+        )
+
+        self._attr_device_info = device_info
+        self._attr_unique_id = unique_id
+        self._attr_has_entity_name = True
+
+    async def async_press(self) -> None:
+        await self.hass.async_add_executor_job(self.rest.idrac_reset, 'GracefulShutdown')
 
 
 class IdracRefreshButton(ButtonEntity):

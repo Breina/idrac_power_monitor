@@ -1,29 +1,24 @@
-"""Platform for iDRAC power sensor integration."""
+"""Platform for iDrac power switch integration."""
 from __future__ import annotations
 
 import logging
+from typing import Any
 
-from homeassistant.components.binary_sensor import BinarySensorEntity, BinarySensorDeviceClass, \
-    BinarySensorEntityDescription
+from homeassistant.components.switch import SwitchEntity, SwitchEntityDescription, SwitchDeviceClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.exceptions import PlatformNotReady
+from homeassistant.helpers.entity import DeviceInfo
 
-from .const import (DOMAIN, DATA_IDRAC_REST_CLIENT, JSON_MODEL, JSON_MANUFACTURER, JSON_SERIAL_NUMBER,
-                    DATA_IDRAC_FIRMWARE, DATA_IDRAC_INFO)
+from .const import (DOMAIN, DATA_IDRAC_REST_CLIENT, JSON_MODEL, JSON_MANUFACTURER, JSON_SERIAL_NUMBER, DATA_IDRAC_INFO,
+                    DATA_IDRAC_FIRMWARE)
 from .idrac_rest import IdracRest, CannotConnect, RedfishConfig
 
 _LOGGER = logging.getLogger(__name__)
 
-protocol = 'https://'
-drac_managers = '/redfish/v1/Managers/iDRAC.Embedded.1'
-drac_chassis_path = '/redfish/v1/Chassis/System.Embedded.1'
-drac_powercontrol_path = '/redfish/v1/Chassis/System.Embedded.1/Power/PowerControl'
-
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
-    """Add iDRAC power sensor entry"""
+    """Add iDrac power sensor entry"""
     rest_client = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_REST_CLIENT]
 
     try:
@@ -60,24 +55,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     )
 
     async_add_entities([
-        IdracStatusBinarySensor(hass, rest_client, device_info, f"{serial}_{name}_status",
-                                f"{name} status"
-                                )
+        IdracPowerSwitch(hass, rest_client, device_info, f"{serial}_{name}_power_on", name)
     ])
 
 
-class IdracStatusBinarySensor(BinarySensorEntity):
-    """The iDRAC's current power sensor entity."""
-
-    def __init__(self, hass, rest: IdracRest, device_info, unique_id, name):
+class IdracPowerSwitch(SwitchEntity):
+    def __init__(self, hass: HomeAssistant, rest: IdracRest, device_info: dict, unique_id: str, name: str):
         self.hass = hass
         self.rest = rest
 
-        self.entity_description = BinarySensorEntityDescription(
-            key='status',
-            name=name,
+        self.entity_description = SwitchEntityDescription(
+            key='power',
+            name=f"Power {name}",
             icon='mdi:power',
-            device_class=BinarySensorDeviceClass.RUNNING,
+            device_class=SwitchDeviceClass.SWITCH
         )
 
         self._attr_device_info = device_info
@@ -86,15 +77,12 @@ class IdracStatusBinarySensor(BinarySensorEntity):
 
         self.rest.register_callback_status(self.update_value)
 
-    @property
-    def name(self):
-        """Name of the entity."""
-        return "Server Status"
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        await self.hass.async_add_executor_job(self.rest.idrac_reset, 'On')
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        await self.hass.async_add_executor_job(self.rest.idrac_reset, 'GracefulShutdown')
 
     def update_value(self, status: bool | None):
-        if status:
-            self._attr_is_on = status
-            self._attr_available = True
-        else:
-            self._attr_available = False
+        self._attr_is_on = status
         self.schedule_update_ha_state()
