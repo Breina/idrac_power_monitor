@@ -1,0 +1,24 @@
+{
+  "title": "Monitor de energia iDRAC",
+  "config": {
+    "step": {
+      "user": {
+        "data": {
+          "host": "Nome do host da instância iDRAC",
+          "username": "Nome de utilizador iDRAC",
+          "password": "Palavra-passe iDRAC",
+          "interval": "Intervalo em segundos entre cada consulta"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Não é possível ligar",
+      "invalid_auth": "Credenciais inválidas",
+      "redfish_config": "Redfish não está ativado. Inicie a GUI do iDRAC num navegador da web e navegue até à página Serviço de Rede - Servidor -> Configurações iDRAC -> Rede -> Serviços -> Redfish. Verifique se a opção Ativado está selecionada.",
+      "unknown": "Erro desconhecido"
+    },
+    "abort": {
+      "already_configured": "Esta integração já foi configurada"
+    }
+  }
+}
