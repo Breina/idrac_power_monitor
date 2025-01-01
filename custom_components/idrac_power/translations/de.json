@@ -1,0 +1,24 @@
+{
+  "title": "iDRAC-Leistungsmonitor",
+  "config": {
+    "step": {
+      "user": {
+        "data": {
+          "host": "Hostname der iDRAC-Instanz",
+          "username": "iDRAC-Benutzername",
+          "password": "iDRAC-Passwort",
+          "interval": "Intervall in Sekunden zwischen den Abfragen"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbindung kann nicht hergestellt werden",
+      "invalid_auth": "Ungültige Anmeldedaten",
+      "redfish_config": "Redfish ist nicht aktiviert. Öffnen Sie die iDRAC-GUI mit einem Webbrowser und navigieren Sie zur Seite Netzwerksdienste - Server -> iDRAC-Einstellungen -> Netzwerk -> Dienste -> Redfish. Überprüfen Sie, ob \"Aktiviert\" ausgewählt ist.",
+      "unknown": "Unbekannter Fehler"
+    },
+    "abort": {
+      "already_configured": "Diese Integration wurde bereits konfiguriert"
+    }
+  }
+}
