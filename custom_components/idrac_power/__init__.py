@@ -34,10 +34,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         DATA_IDRAC_REST_CLIENT: rest_client
     }
 
-    hass.async_create_task(
-        hass.config_entries.async_forward_entry_setups(
-            entry, [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.BUTTON, Platform.SWITCH]
-        )
+    await hass.config_entries.async_forward_entry_setups(
+        entry, [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.BUTTON, Platform.SWITCH]
     )
 
     async def refresh_sensors_task():
