@@ -4,7 +4,12 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from homeassistant.components.sensor import SensorEntity, SensorEntityDescription, SensorStateClass, SensorDeviceClass
+from homeassistant.components.sensor import (
+    SensorEntity, 
+    SensorEntityDescription, 
+    SensorStateClass, 
+    SensorDeviceClass
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
@@ -70,7 +75,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 
     _LOGGER.debug(f"Adding new devices to device info {('serial', serial)}")
 
-    entities = [IdracCurrentPowerSensor(hass, rest_client, device_info, f"{serial}_{name}_power", name)]
+    entities = [
+        IdracCurrentPowerSensor(hass, rest_client, device_info, f"{serial}_{name}_power", name),
+        IdracEnergyConsumptionSensor(hass, rest_client, device_info, f"{serial}_{name}_energy", name)
+    ]
 
     for i, fan in enumerate(thermal_info['Fans']):
         member_id = fan['MemberId']
@@ -184,6 +192,39 @@ class IdracTempSensor(SensorEntity):
                 if temp['MemberId'] == self.member_id:
                     self._attr_native_value = temp['ReadingCelsius']
                     break
+            self._attr_available = True
+        else:
+            self._attr_available = False
+        self.schedule_update_ha_state()
+
+
+class IdracEnergyConsumptionSensor(SensorEntity):
+    """The iDRAC's energy consumption sensor entity."""
+
+    def __init__(self, hass, rest: IdracRest, device_info, unique_id, name):
+        self.hass = hass
+        self.rest = rest
+
+        self.entity_description = SensorEntityDescription(
+            key='energy_consumption',
+            name=f"{name} energy consumption",
+            icon='mdi:lightning-bolt-circle',
+            native_unit_of_measurement='kWh',
+            device_class=SensorDeviceClass.ENERGY,
+            state_class=SensorStateClass.TOTAL_INCREASING
+        )
+
+        self._attr_device_info = device_info
+        self._attr_unique_id = unique_id
+        self._attr_has_entity_name = True
+
+        self._attr_native_value = None
+
+        self.rest.register_callback_energy_consumption(self.update_value)
+
+    def update_value(self, new_value: float | None):
+        if new_value is not None:
+            self._attr_native_value = new_value
             self._attr_available = True
         else:
             self._attr_available = False
