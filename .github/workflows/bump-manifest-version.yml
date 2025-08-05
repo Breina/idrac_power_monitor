@@ -11,22 +11,39 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Important: allows tag deletion and re-tagging
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: 3.x
 
+      - name: Extract version from tag
+        id: extract_version
+        run: |
+          VERSION="${GITHUB_REF##*/}"  # e.g., v1.2.3
+          VERSION="${VERSION#v}"       # strip the 'v'
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
       - name: Update manifest.json version
         run: |
-          VERSION="${GITHUB_REF##*/}"
-          VERSION="${VERSION#v}"
-          jq --arg ver "$VERSION" '.version = $ver' custom_components/idrac_power/manifest.json > temp.json
+          jq --arg ver "${{ steps.extract_version.outputs.version }}" '.version = $ver' custom_components/idrac_power/manifest.json > temp.json
           mv temp.json custom_components/idrac_power/manifest.json
 
-      - name: Commit and push changes
+      - name: Commit and push updated manifest
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git commit -am "Update manifest.json version to $VERSION" || echo "No changes to commit"
+          git commit -am "Update manifest.json version to ${{ steps.extract_version.outputs.version }}" || echo "No changes to commit"
           git push origin HEAD:master
+
+      - name: Re-tag the current commit
+        run: |
+          TAG="v${{ steps.extract_version.outputs.version }}"
+          # Delete old tag locally and remotely
+          git tag -d "$TAG"
+          git push --delete origin "$TAG"
+          # Create new tag on the current commit
+          git tag "$TAG"
+          git push origin "$TAG"
