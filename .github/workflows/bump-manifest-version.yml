@@ -1,0 +1,32 @@
+name: Bump manifest.json version
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  update-manifest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.x
+
+      - name: Update manifest.json version
+        run: |
+          VERSION="${GITHUB_REF##*/}"
+          VERSION="${VERSION#v}"
+          jq --arg ver "$VERSION" '.version = $ver' custom_components/idrac_power/manifest.json > temp.json
+          mv temp.json custom_components/idrac_power/manifest.json
+
+      - name: Commit and push changes
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git commit -am "Update manifest.json version to $VERSION"
+          git push
