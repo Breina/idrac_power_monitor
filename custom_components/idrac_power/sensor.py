@@ -76,9 +76,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     _LOGGER.debug(f"Adding new devices to device info {('serial', serial)}")
 
     entities = [
-        IdracCurrentPowerSensor(hass, rest_client, device_info, f"{serial}_{name}_power", name),
-        IdracEnergyConsumptionSensor(hass, rest_client, device_info, f"{serial}_{name}_energy", name)
+        IdracCurrentPowerSensor(hass, rest_client, device_info, f"{serial}_{name}_power", name)
     ]
+
+    if rest_client.supports_energy_sensor():
+        entities.append(
+            IdracEnergyConsumptionSensor(
+                hass, rest_client, device_info, f"{serial}_{name}_energy", name
+            )
+        )
+    else:
+        _LOGGER.info(
+            "Skipping energy consumption sensor for %s (%s): not supported on iDRAC 9",
+            serial,
+            name,
+        )
 
     for i, fan in enumerate(thermal_info['Fans']):
         member_id = fan['MemberId']

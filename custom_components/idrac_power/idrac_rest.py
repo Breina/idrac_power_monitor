@@ -86,9 +86,14 @@ class IdracRest:
         self.power_usage: int = 0
         self.energy_consumption: float = 0
         
-        # Cache for version detection to avoid repeated checks
+        # Cache for version detection / firmware capabilities
         self._idrac_version_cache: int | None = None
         self._device_model: str | None = None
+        self._firmware_version_tuple: tuple[int, int, int, int] | None = None
+        self._energy_supports_logging_done: bool = False
+
+        # Capability overrides (set when endpoints 404)
+        self._force_legacy_thermals: bool = False
 
     def get_device_info(self) -> dict | None:
         try:
@@ -122,8 +127,11 @@ class IdracRest:
         if not model_string:
             return ''
         
-        # Remove "PowerEdge" prefix if present
+        # Normalize casing/punctuation and remove "PowerEdge" prefix if present
         model = model_string.replace('PowerEdge', '').strip()
+        model = re.sub(r'[,/]', ' ', model)
+        model = re.sub(r'\s+', ' ', model).strip()
+        model = re.sub(r'[^A-Za-z0-9 ]+', '', model)
         
         # Split by whitespace and take relevant parts
         parts = model.split()
@@ -170,13 +178,19 @@ class IdracRest:
         try:
             parts = version_string.split('.')
             if len(parts) >= 4:
-                return (int(parts[0]), int(parts[1]), int(parts[2]), int(parts[3]))
+                version_tuple = (int(parts[0]), int(parts[1]), int(parts[2]), int(parts[3]))
             elif len(parts) >= 2:
-                return (int(parts[0]), int(parts[1]), 0, 0)
+                version_tuple = (int(parts[0]), int(parts[1]), 0, 0)
             elif len(parts) >= 1:
-                return (int(parts[0]), 0, 0, 0)
+                version_tuple = (int(parts[0]), 0, 0, 0)
+            else:
+                version_tuple = (0, 0, 0, 0)
+
+            self._firmware_version_tuple = version_tuple
+            return version_tuple
         except (ValueError, AttributeError):
             _LOGGER.warning(f"Failed to parse firmware version: {version_string}")
+            return (0, 0, 0, 0)
         
         return (0, 0, 0, 0)
 
@@ -254,6 +268,43 @@ class IdracRest:
         _LOGGER.info(f"iDRAC version detection complete: Using iDRAC {detected_version} APIs for {self.host}")
         
         return detected_version
+
+    def _get_firmware_tuple(self) -> tuple[int, int, int, int]:
+        """Return the cached firmware tuple, ensuring detection ran."""
+        if self._firmware_version_tuple is None:
+            firmware_version = self.get_firmware_version()
+            if firmware_version:
+                self._parse_firmware_version(firmware_version)
+        return self._firmware_version_tuple or (0, 0, 0, 0)
+
+    def supports_new_thermal_api(self) -> bool:
+        """Return True if the host should support the ThermalSubsystem/Sensors APIs."""
+        if self._force_legacy_thermals:
+            return False
+
+        if self.detect_idrac_version() != 9:
+            return False
+
+        major, *_ = self._get_firmware_tuple()
+        return major >= 6  # ThermalSubsystem introduced in 6.x per Dell docs
+
+    def supports_energy_sensor(self) -> bool:
+        """Return True if the cumulative energy sensor should be exposed."""
+        return self.detect_idrac_version() != 9
+
+    def _disable_new_thermals(self, reason: str) -> None:
+        """Disable future attempts to use the new thermal APIs."""
+        if not self._force_legacy_thermals:
+            _LOGGER.info(
+                f"Disabling iDRAC 9 ThermalSubsystem/Sensors API for {self.host}: {reason}. "
+                "Falling back to legacy /Thermal endpoint."
+            )
+        self._force_legacy_thermals = True
+
+    def _log_energy_unavailable_once(self):
+        if not self._energy_supports_logging_done:
+            _LOGGER.info(f"Energy consumption is not available on iDRAC 9 ({self.host}); sensor disabled.")
+            self._energy_supports_logging_done = True
 
     def get_firmware_version(self) -> str | None:
         try:
@@ -521,10 +572,10 @@ class IdracRest:
         Tries iDRAC 9 APIs first, falls back to legacy API if needed.
         """
         new_thermals = None
-        idrac_version = self.detect_idrac_version()
+        use_new_api = self.supports_new_thermal_api()
         
-        # Try iDRAC 9 APIs first if we detected iDRAC 9
-        if idrac_version == 9:
+        # Try iDRAC 9 APIs first if firmware supports them
+        if use_new_api:
             _LOGGER.debug(f"Attempting to fetch thermals using iDRAC 9 APIs for {self.host}")
             try:
                 new_thermals = self._fetch_idrac9_thermals()
@@ -535,6 +586,9 @@ class IdracRest:
                 else:
                     _LOGGER.info(f"iDRAC 9 APIs returned empty data, falling back to legacy API")
                     new_thermals = None
+            except ThermalEndpointUnavailable as e:
+                self._disable_new_thermals(str(e))
+                new_thermals = None
             except Exception as e:
                 _LOGGER.info(f"iDRAC 9 thermal APIs failed ({e}), falling back to legacy API")
                 new_thermals = None
@@ -550,6 +604,16 @@ class IdracRest:
             except (RequestException, RedfishConfig, CannotConnect) as e:
                 _LOGGER.debug(f"Couldn't update {self.host} thermals: {e}")
                 new_thermals = None
+
+        if new_thermals:
+            fans_count = len(new_thermals.get('Fans') or [])
+            temps_count = len(new_thermals.get('Temperatures') or [])
+            _LOGGER.debug(
+                "Thermal payload from %s: %s fans, %s temperature sensors",
+                self.host,
+                fans_count,
+                temps_count,
+            )
 
         if new_thermals != self.thermal_values:
             self.thermal_values = new_thermals
@@ -568,24 +632,28 @@ class IdracRest:
         # Fetch fans from ThermalSubsystem/Fans
         try:
             fans_response = self.get_path(drac_thermal_subsystem_fans)
-            if fans_response.status_code == 200:
-                fans_collection = fans_response.json()
-                fans = self._normalize_idrac9_fans(fans_collection)
-                _LOGGER.debug(f"Fetched {len(fans)} fans from iDRAC 9 ThermalSubsystem API")
-            else:
-                _LOGGER.warning(f"iDRAC 9 fans endpoint returned status {fans_response.status_code}")
+            if fans_response.status_code == 404:
+                raise ThermalEndpointUnavailable("ThermalSubsystem endpoint not found")
+            handle_error(fans_response)
+            fans_collection = fans_response.json()
+            fans = self._normalize_idrac9_fans(fans_collection)
+            _LOGGER.debug(f"Fetched {len(fans)} fans from iDRAC 9 ThermalSubsystem API")
+        except ThermalEndpointUnavailable:
+            raise
         except Exception as e:
             _LOGGER.warning(f"Failed to fetch fans from iDRAC 9 API: {e}")
         
         # Fetch temperatures from Sensors
         try:
             sensors_response = self.get_path(drac_sensors)
-            if sensors_response.status_code == 200:
-                sensors_collection = sensors_response.json()
-                temperatures = self._normalize_idrac9_temperatures(sensors_collection)
-                _LOGGER.debug(f"Fetched {len(temperatures)} temperature sensors from iDRAC 9 Sensors API")
-            else:
-                _LOGGER.warning(f"iDRAC 9 sensors endpoint returned status {sensors_response.status_code}")
+            if sensors_response.status_code == 404:
+                raise ThermalEndpointUnavailable("Sensors endpoint not found")
+            handle_error(sensors_response)
+            sensors_collection = sensors_response.json()
+            temperatures = self._normalize_idrac9_temperatures(sensors_collection)
+            _LOGGER.debug(f"Fetched {len(temperatures)} temperature sensors from iDRAC 9 Sensors API")
+        except ThermalEndpointUnavailable:
+            raise
         except Exception as e:
             _LOGGER.warning(f"Failed to fetch temperature sensors from iDRAC 9 API: {e}")
         
@@ -641,10 +709,9 @@ class IdracRest:
             pass
             
         # Get energy consumption - only available on iDRAC 7/8
-        idrac_version = self.detect_idrac_version()
-        if idrac_version == 9:
+        if self.detect_idrac_version() == 9:
             # iDRAC 9 does not provide cumulative energy consumption via any API
-            _LOGGER.debug(f"Energy consumption not available on iDRAC 9 ({self.host})")
+            self._log_energy_unavailable_once()
             # Note: We don't call callbacks here to keep the sensor in its last state
             # rather than marking it unavailable on every update
         else:
@@ -663,6 +730,10 @@ class IdracRest:
 
 class CannotConnect(HomeAssistantError):
     """Error to indicate we cannot connect."""
+
+
+class ThermalEndpointUnavailable(Exception):
+    """Raised when iDRAC 9 ThermalSubsystem/Sensors endpoints are missing."""
 
 
 class InvalidAuth(HomeAssistantError):
