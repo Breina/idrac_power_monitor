@@ -84,14 +84,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         member_id = fan['MemberId']
         _LOGGER.info("Adding fan %s : %s", i, fan["FanName"])
         entities.append(IdracFanSensor(hass, rest_client, device_info, f"{serial}_{name}_fan_{member_id}",
-                                       f"{name} {fan['FanName']}", member_id
+                                       f"{name} {fan['FanName']}", member_id,
+                                       initial_reading=fan.get('Reading')
                                        ))
 
     for i, temp in enumerate(thermal_info['Temperatures']):
         member_id = temp['MemberId']
         _LOGGER.info("Adding temp %s : %s", i, temp["Name"])
         entities.append(IdracTempSensor(hass, rest_client, device_info, f"{serial}_{name}_temp_{member_id}",
-                                        f"{name} {temp['Name']}", member_id
+                                        f"{name} {temp['Name']}", member_id,
+                                        initial_reading=temp.get('ReadingCelsius')
                                         ))
 
     async_add_entities(entities)
@@ -131,7 +133,7 @@ class IdracCurrentPowerSensor(SensorEntity):
 
 
 class IdracFanSensor(SensorEntity):
-    def __init__(self, hass, rest: IdracRest, device_info, unique_id, name, member_id):
+    def __init__(self, hass, rest: IdracRest, device_info, unique_id, name, member_id, initial_reading=None):
         self.hass = hass
         self.rest = rest
 
@@ -147,7 +149,7 @@ class IdracFanSensor(SensorEntity):
         self._attr_unique_id = unique_id
         self._attr_has_entity_name = True
 
-        self._attr_native_value = None
+        self._attr_native_value = initial_reading
         self.member_id = member_id
 
         self.rest.register_callback_thermals(self.update_value)
@@ -165,7 +167,7 @@ class IdracFanSensor(SensorEntity):
 
 
 class IdracTempSensor(SensorEntity):
-    def __init__(self, hass, rest: IdracRest, device_info, unique_id, name, member_id):
+    def __init__(self, hass, rest: IdracRest, device_info, unique_id, name, member_id, initial_reading=None):
         self.hass = hass
         self.rest = rest
 
@@ -181,7 +183,7 @@ class IdracTempSensor(SensorEntity):
         self._attr_device_info = device_info
         self._attr_unique_id = unique_id
         self._attr_has_entity_name = True
-        self._attr_native_value = None
+        self._attr_native_value = initial_reading
         self.member_id = member_id
 
         self.rest.register_callback_thermals(self.update_value)
