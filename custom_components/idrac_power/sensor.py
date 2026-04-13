@@ -48,7 +48,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
             if DATA_IDRAC_FIRMWARE in hass.data[DOMAIN][entry.entry_id]:
                 firmware_version = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_FIRMWARE]
         else:
-            hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_INFO] = firmware_version
+            hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_FIRMWARE] = firmware_version
 
         thermal_info = await hass.async_add_executor_job(target=rest_client.update_thermals)
         if not thermal_info:
@@ -124,7 +124,7 @@ class IdracCurrentPowerSensor(SensorEntity):
         self.rest.register_callback_power_usage(self.update_value)
 
     def update_value(self, new_value: int | None):
-        if new_value:
+        if new_value is not None:
             self._attr_native_value = new_value
             self._attr_available = True
         else:
