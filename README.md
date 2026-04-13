@@ -1,5 +1,13 @@
 # iDRAC power monitor
 
+## Changelog
+
+### 1.7.0
+- Add firmware version detection to disable legacy `/data` endpoint on iDRAC 9 firmware 7.x+ (fixes #41)
+- Prefer Redfish `PowerMetrics.EnergyConsumedKWh` for energy consumption over legacy endpoint
+- Fix error log spam on firmware that removed the `/data/login` endpoint
+- Fix potential `NameError` in legacy endpoint logout when login fails
+
 [![hacs_badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/integration)
 ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/Breina/idrac_power_monitor/validate.yaml)
 ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/Breina/idrac_power_monitor/hassfest.yaml)
