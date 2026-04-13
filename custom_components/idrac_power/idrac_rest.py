@@ -61,6 +61,28 @@ class IdracRest:
         self.power_usage: int = 0
         self.energy_consumption: float = 0
 
+        self._firmware_version: str | None = None
+        self._legacy_endpoint_supported: bool = True
+
+    def configure_firmware(self, firmware_version: str) -> None:
+        """Configure client capabilities based on detected firmware version."""
+        self._firmware_version = firmware_version
+        try:
+            major_version = int(firmware_version.split('.')[0])
+            # iDRAC 9 firmware 7.x+ removed the legacy /data endpoint
+            self._legacy_endpoint_supported = major_version < 7
+            if not self._legacy_endpoint_supported:
+                _LOGGER.info(
+                    "Firmware %s detected on %s - legacy /data endpoint disabled, using Redfish only",
+                    firmware_version, self.host
+                )
+        except (ValueError, IndexError):
+            _LOGGER.warning(
+                "Could not parse firmware version '%s' on %s, legacy endpoint remains enabled",
+                firmware_version, self.host
+            )
+            self._legacy_endpoint_supported = True
+
     def get_device_info(self) -> dict | None:
         try:
             result = self.get_path(drac_chassis_path)
@@ -158,79 +180,77 @@ class IdracRest:
         self.callback_energy_consumption.append(callback)
         
     def get_energy_consumption_via_data_endpoint(self) -> float | None:
-        """Get energy consumption using the /data endpoint approach from idrac.py."""
+        """Get energy consumption using the legacy /data endpoint (pre-7.x firmware)."""
+        st1 = None
+        st2 = None
+        login_response = None
         try:
-            # First login to get tokens
             login_url = f"{protocol}{self.host}/data/login"
             payload = {"user": self.auth[0], "password": self.auth[1]}
-            
+
             login_response = requests.post(login_url, data=payload, verify=False, timeout=300)
-            if login_response.status_code != 200:
-                _LOGGER.error(f"Login failed with status code: {login_response.status_code}")
+            if login_response.status_code == 404:
+                _LOGGER.info(
+                    "Legacy /data endpoint not available on %s (HTTP 404) - disabling for future requests",
+                    self.host
+                )
+                self._legacy_endpoint_supported = False
                 return None
-                
-            # Extract ST1 and ST2 tokens from response
+            if login_response.status_code != 200:
+                _LOGGER.debug(f"Legacy login on {self.host} failed with status code: {login_response.status_code}")
+                return None
+
             match = re.search(r'ST1=([^,]+),ST2=([^<"]+)', login_response.text)
             if not match:
-                _LOGGER.error("Failed to extract authentication tokens")
+                _LOGGER.debug("Failed to extract authentication tokens from %s", self.host)
                 return None
-                
+
             st1 = match.group(1)
             st2 = match.group(2)
-            
-            # Get power monitoring data
+
             power_url = f"{protocol}{self.host}/data"
             params = {
-                "get": "powermonitordata,powergraphdata,psRedundancy,pwState,pbtEnabled,activePLPolicy,activePLimit,pwrBudgetVal,powerSupplies,pbMaxWatts"
+                "get": "powermonitordata,powergraphdata,psRedundancy,pwState,"
+                       "pbtEnabled,activePLPolicy,activePLimit,pwrBudgetVal,powerSupplies,pbMaxWatts"
             }
-            
-            headers = {
-                "ST2": st2,
-                "Content-Type": "application/x-www-form-urlencoded"
-            }
-            
+            headers = {"ST2": st2, "Content-Type": "application/x-www-form-urlencoded"}
+
             power_response = requests.post(
-                power_url, 
-                params=params, 
-                cookies=login_response.cookies, 
-                headers=headers,
-                verify=False,
-                timeout=300
+                power_url, params=params, cookies=login_response.cookies,
+                headers=headers, verify=False, timeout=300
             )
-            
+
             if power_response.status_code != 200:
-                _LOGGER.error(f"Power data request failed with status code: {power_response.status_code}")
+                _LOGGER.debug(f"Legacy power data request on {self.host} failed: {power_response.status_code}")
                 return None
-                
-            # Parse the XML response to extract total usage
+
             try:
                 root = ET.fromstring(power_response.text)
                 total_usage_elem = root.find('.//totalUsage')
-                
                 if total_usage_elem is not None and total_usage_elem.text:
                     return float(total_usage_elem.text)
-                else:
-                    _LOGGER.debug("Total usage data not found in the response")
-                    return None
+                _LOGGER.debug("Total usage data not found in legacy response from %s", self.host)
+                return None
             except ET.ParseError as e:
-                _LOGGER.error(f"Failed to parse XML: {e}")
+                _LOGGER.debug(f"Failed to parse legacy XML from {self.host}: {e}")
                 return None
             except ValueError as e:
-                _LOGGER.error(f"Failed to convert total usage to float: {e}")
+                _LOGGER.debug(f"Failed to convert total usage to float from {self.host}: {e}")
                 return None
-            
+
         except Exception as e:
-            _LOGGER.error(f"Error getting energy consumption via data endpoint: {e}")
+            _LOGGER.debug(f"Error getting energy consumption via legacy endpoint on {self.host}: {e}")
             return None
         finally:
-            # Try to logout to free the session
-            try:
-                logout_url = f"{protocol}{self.host}/data/logout"
-                params = {"ST1": st1}
-                headers = {"ST2": st2}
-                requests.post(logout_url, params=params, headers=headers, cookies=login_response.cookies, verify=False, timeout=300)
-            except Exception as e:
-                _LOGGER.debug(f"Logout failed: {e}")
+            if st1 and st2 and login_response:
+                try:
+                    logout_url = f"{protocol}{self.host}/data/logout"
+                    requests.post(
+                        logout_url, params={"ST1": st1}, headers={"ST2": st2},
+                        cookies=login_response.cookies, verify=False, timeout=300
+                    )
+                except Exception as e:
+                    _LOGGER.debug(f"Legacy logout on {self.host} failed: {e}")
 
     def update_thermals(self) -> dict:
         try:
@@ -288,17 +308,33 @@ class IdracRest:
                     callback(self.power_usage)
         except:
             pass
-            
-        # Get energy consumption using the data endpoint approach
+
+        # Try Redfish energy data first (available on newer firmware)
+        energy_updated = False
         try:
-            energy_value = self.get_energy_consumption_via_data_endpoint()
-            
-            if energy_value is not None and energy_value != self.energy_consumption:
-                self.energy_consumption = energy_value
-                for callback in self.callback_energy_consumption:
-                    callback(self.energy_consumption)
-        except Exception as e:
-            _LOGGER.debug(f"Couldn't update {self.host} energy consumption: {e}")
+            power_metrics = power_values.get(JSON_POWER_METRICS)
+            if power_metrics:
+                energy_kwh = power_metrics.get(JSON_ENERGY_CONSUMED_KWH)
+                if energy_kwh is not None:
+                    energy_value = float(energy_kwh)
+                    if energy_value != self.energy_consumption:
+                        self.energy_consumption = energy_value
+                        for callback in self.callback_energy_consumption:
+                            callback(self.energy_consumption)
+                    energy_updated = True
+        except (KeyError, TypeError, ValueError) as e:
+            _LOGGER.debug(f"Redfish energy data not available for {self.host}: {e}")
+
+        # Fall back to legacy /data endpoint if Redfish didn't provide energy data
+        if not energy_updated and self._legacy_endpoint_supported:
+            try:
+                energy_value = self.get_energy_consumption_via_data_endpoint()
+                if energy_value is not None and energy_value != self.energy_consumption:
+                    self.energy_consumption = energy_value
+                    for callback in self.callback_energy_consumption:
+                        callback(self.energy_consumption)
+            except Exception as e:
+                _LOGGER.debug(f"Couldn't update {self.host} energy consumption via legacy endpoint: {e}")
             # Don't set callbacks to None if we just can't find the energy data
 
 

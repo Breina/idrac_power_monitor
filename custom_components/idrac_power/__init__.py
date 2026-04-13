@@ -34,6 +34,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         DATA_IDRAC_REST_CLIENT: rest_client
     }
 
+    # Detect firmware version to configure client capabilities
+    try:
+        firmware_version = await hass.async_add_executor_job(rest_client.get_firmware_version)
+        if firmware_version:
+            rest_client.configure_firmware(firmware_version)
+    except Exception as e:
+        _LOGGER.warning(f"Could not detect firmware version for {entry.entry_id}: {e}")
+
     await hass.config_entries.async_forward_entry_setups(
         entry, [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.BUTTON, Platform.SWITCH]
     )
