@@ -7,7 +7,7 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN, DATA_IDRAC_REST_CLIENT, HOST, USERNAME, PASSWORD, CONF_INTERVAL, CONF_INTERVAL_DEFAULT
-from .idrac_rest import IdracMock, IdracRest
+from .client_factory import create_client
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -15,27 +15,26 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up the iDRAC connection from a config entry."""
 
-    if entry.data[HOST] == 'MOCK':
-        rest_client = IdracMock(
-            entry.data[HOST],
-            entry.data[USERNAME],
-            entry.data[PASSWORD],
-            entry.data.get(CONF_INTERVAL, CONF_INTERVAL_DEFAULT)
-        )
-    else:
-        rest_client = IdracRest(
-            entry.data[HOST],
-            entry.data[USERNAME],
-            entry.data[PASSWORD],
-            entry.data.get(CONF_INTERVAL, CONF_INTERVAL_DEFAULT)
-        )
+    rest_client = await hass.async_add_executor_job(
+        create_client,
+        entry.data[HOST],
+        entry.data[USERNAME],
+        entry.data[PASSWORD],
+        entry.data.get(CONF_INTERVAL, CONF_INTERVAL_DEFAULT),
+    )
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
         DATA_IDRAC_REST_CLIENT: rest_client
     }
 
+    platforms = [Platform.SENSOR]
+    if getattr(rest_client, "supports_status", True):
+        platforms.append(Platform.BINARY_SENSOR)
+    if getattr(rest_client, "supports_power_control", True):
+        platforms.extend([Platform.BUTTON, Platform.SWITCH])
+
     await hass.config_entries.async_forward_entry_setups(
-        entry, [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.BUTTON, Platform.SWITCH]
+        entry, platforms
     )
 
     async def refresh_sensors_task():

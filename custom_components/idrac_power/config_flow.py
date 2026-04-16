@@ -14,7 +14,8 @@ from homeassistant.data_entry_flow import FlowResult
 from .const import (
     DOMAIN, JSON_MODEL, CONF_INTERVAL, CONF_INTERVAL_DEFAULT,
 )
-from .idrac_rest import IdracRest, CannotConnect, InvalidAuth, RedfishConfig, IdracMock
+from .client_factory import create_client
+from .idrac_rest import CannotConnect, InvalidAuth, RedfishConfig
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -65,22 +66,15 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def validate_input(self, data: dict[str, Any]) -> dict[str, Any]:
-        if data[CONF_HOST] == 'MOCK':
-            rest_client = IdracMock(
-                host=data[CONF_HOST],
-                username=data[CONF_USERNAME],
-                password=data[CONF_PASSWORD],
-                interval=data[CONF_INTERVAL],
-            )
-        else:
-            rest_client = IdracRest(
-                host=data[CONF_HOST],
-                username=data[CONF_USERNAME],
-                password=data[CONF_PASSWORD],
-                interval=data[CONF_INTERVAL],
-            )
+        rest_client = await self.hass.async_add_executor_job(
+            create_client,
+            data[CONF_HOST],
+            data[CONF_USERNAME],
+            data[CONF_PASSWORD],
+            data[CONF_INTERVAL],
+        )
 
-        device_info = await hass.async_add_executor_job(self.hass, target=rest_client.get_device_info)
+        device_info = await self.hass.async_add_executor_job(rest_client.get_device_info)
         model_name = device_info[JSON_MODEL]
 
         return dict(model_name=model_name)
