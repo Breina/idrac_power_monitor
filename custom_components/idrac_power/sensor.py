@@ -36,6 +36,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     try:
         if DATA_IDRAC_INFO not in hass.data[DOMAIN][entry.entry_id]:
             info = await hass.async_add_executor_job(target=rest_client.get_device_info)
+
             if not info:
                 raise PlatformNotReady(f"Could not set up: device didn't return anything.")
 
@@ -48,14 +49,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
             if DATA_IDRAC_FIRMWARE in hass.data[DOMAIN][entry.entry_id]:
                 firmware_version = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_FIRMWARE]
         else:
-            hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_INFO] = firmware_version
+            hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_FIRMWARE] = firmware_version
 
-        thermal_info = await hass.async_add_executor_job(target=rest_client.update_thermals)
-        if not thermal_info:
-            if DATA_IDRAC_THERMAL in hass.data[DOMAIN][entry.entry_id]:
-                thermal_info = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_THERMAL]
-            else:
-                raise PlatformNotReady(f"Could not set up: couldn't get thermal info.")
+        thermal_info = None
+        if getattr(rest_client, "supports_thermals", True):
+            thermal_info = await hass.async_add_executor_job(target=rest_client.update_thermals)
+            if not thermal_info:
+                if DATA_IDRAC_THERMAL in hass.data[DOMAIN][entry.entry_id]:
+                    thermal_info = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_THERMAL]
+                else:
+                    raise PlatformNotReady(f"Could not set up: couldn't get thermal info.")
     except (CannotConnect, RedfishConfig) as e:
         raise PlatformNotReady(str(e)) from e
 
@@ -69,18 +72,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         name=name,
         manufacturer=manufacturer,
         model=model,
-        sw_version=firmware_version,
+        sw_version=firmware_version or None,
         serial_number=serial
     )
 
     _LOGGER.debug(f"Adding new devices to device info {('serial', serial)}")
 
     entities = [
-        IdracCurrentPowerSensor(hass, rest_client, device_info, f"{serial}_{name}_power", name),
-        IdracEnergyConsumptionSensor(hass, rest_client, device_info, f"{serial}_{name}_energy", name)
+        IdracCurrentPowerSensor(hass, rest_client, device_info, f"{serial}_{name}_power", name)
     ]
 
-    for i, fan in enumerate(thermal_info['Fans']):
+    if getattr(rest_client, "supports_energy", True):
+        entities.append(
+            IdracEnergyConsumptionSensor(hass, rest_client, device_info, f"{serial}_{name}_energy", name)
+        )
+
+    for i, fan in enumerate((thermal_info or {}).get('Fans', [])):
         member_id = fan['MemberId']
         _LOGGER.info("Adding fan %s : %s", i, fan["FanName"])
         entities.append(IdracFanSensor(hass, rest_client, device_info, f"{serial}_{name}_fan_{member_id}",
@@ -88,7 +95,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
                                        initial_reading=fan.get('Reading')
                                        ))
 
-    for i, temp in enumerate(thermal_info['Temperatures']):
+    for i, temp in enumerate((thermal_info or {}).get('Temperatures', [])):
         member_id = temp['MemberId']
         _LOGGER.info("Adding temp %s : %s", i, temp["Name"])
         entities.append(IdracTempSensor(hass, rest_client, device_info, f"{serial}_{name}_temp_{member_id}",
@@ -124,7 +131,7 @@ class IdracCurrentPowerSensor(SensorEntity):
         self.rest.register_callback_power_usage(self.update_value)
 
     def update_value(self, new_value: int | None):
-        if new_value:
+        if new_value is not None:
             self._attr_native_value = new_value
             self._attr_available = True
         else:
