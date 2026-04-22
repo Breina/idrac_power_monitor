@@ -36,7 +36,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
             if DATA_IDRAC_FIRMWARE in hass.data[DOMAIN][entry.entry_id]:
                 firmware_version = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_FIRMWARE]
         else:
-            hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_INFO] = firmware_version
+            hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_FIRMWARE] = firmware_version
     except (CannotConnect, RedfishConfig) as e:
         raise PlatformNotReady(str(e)) from e
 

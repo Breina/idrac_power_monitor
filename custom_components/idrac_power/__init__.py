@@ -71,6 +71,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # ignore exceptions, just log the error
             _LOGGER.warning(f"Updating {entry.entry_id} power usage failed:\n{e}")
 
-    hass.async_create_background_task(refresh_sensors_task(), f"Update {entry.entry_id} iDRAC task")
+    task = hass.async_create_background_task(refresh_sensors_task(), f"Update {entry.entry_id} iDRAC task")
+    hass.data[DOMAIN][entry.entry_id]['task'] = task
 
     return True
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload an iDRAC config entry."""
+    hass.data[DOMAIN][entry.entry_id]['task'].cancel()
+
+    unload_ok = await hass.config_entries.async_unload_platforms(
+        entry, [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.BUTTON, Platform.SWITCH]
+    )
+
+    if unload_ok:
+        hass.data[DOMAIN].pop(entry.entry_id)
+
+    return unload_ok

@@ -1,12 +1,5 @@
 # iDRAC power monitor
 
-## Changelog
-
-### 1.7.0
-- Add firmware version detection to disable legacy `/data` endpoint on iDRAC 9 firmware 7.x+ (fixes #41)
-- Prefer Redfish `PowerMetrics.EnergyConsumedKWh` for energy consumption over legacy endpoint
-- Fix error log spam on firmware that removed the `/data/login` endpoint
-- Fix potential `NameError` in legacy endpoint logout when login fails
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/integration)
 ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/Breina/idrac_power_monitor/validate.yaml)
@@ -28,6 +21,20 @@ Tested on iDRAC 7 and 8 on multiple Dell PowerEdge servers.
 ## Screenshots
 
 ![Alt text](imgs/entities.png)
+
+## Changelog
+
+### 1.7.0
+- Add firmware version detection to disable legacy `/data` endpoint on iDRAC 9 firmware 7.x+ (fixes #41)
+- Prefer Redfish `PowerMetrics.EnergyConsumedKWh` for energy consumption over legacy endpoint
+- Fix error log spam on firmware that removed the `/data/login` endpoint
+- Fix potential `NameError` in legacy endpoint logout when login fails
+- 
+### 1.6.1
+- Fix firmware version overwriting device info, causing platform setup failures on concurrent load
+- Fix power sensor showing "unavailable" instead of 0W when server is in standby
+- Fix binary status sensor showing "unavailable" instead of "off" when server is powered down
+- Add `async_unload_entry` to properly stop background polling and clean up on integration reload
 
 
 ## Installation
