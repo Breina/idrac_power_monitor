@@ -251,6 +251,62 @@ class IdracRest:
                     )
                 except Exception as e:
                     _LOGGER.debug(f"Legacy logout on {self.host} failed: {e}")
+    
+    def get_energy_consumption_via_sysmgmt(self) -> float | None:
+        """Get energy consumption using the proprietary /sysmgmt endpoint"""
+        login_response = None
+        try:
+            login_url = f"{protocol}{self.host}/sysmgmt/2015/bmc/session"
+            payload_and_headers = {"user": self.auth[0], "password": self.auth[1]}
+
+            login_response = requests.post(login_url, headers=payload_and_headers, data=payload_and_headers, verify=False, timeout=300)
+            login_headers = {'xsrf-token': login_response.headers['xsrf-token']}
+            if login_response.status_code == 404:
+                _LOGGER.info(
+                    "Legacy /sysmgmt endpoint not available on %s (HTTP 404) - disabling for future requests",
+                    self.host
+                )
+                self._sysmgmt_endpoint_supported = False
+                return None
+            auth_result = login_response.json()['authResult']
+            if auth_result != 0 or login_response.status_code != 201:
+                _LOGGER.debug(f"Sysmgmt login on {self.host} failed with status code: {auth_result}")
+                return None
+
+            power_url = f"{protocol}{self.host}/sysmgmt/2015/server/sensor/power"
+
+            power_response = requests.get(
+                power_url, cookies=login_response.cookies, headers=login_headers,
+                verify=False, timeout=300
+            )
+
+            if power_response.status_code != 200:
+                _LOGGER.debug(f"Sysmgmt power data request on {self.host} failed: {power_response.status_code}")
+                return None
+
+            try:
+                root = power_response.json()['root']
+                return float(root['powermonitordata']['cumReading']['totalUsage'])
+
+            except ET.ParseError as e:
+                _LOGGER.debug(f"Failed to parse legacy XML from {self.host}: {e}")
+                return None
+            except ValueError as e:
+                _LOGGER.debug(f"Failed to convert total usage to float from {self.host}: {e}")
+                return None
+
+        except Exception as e:
+            _LOGGER.debug(f"Error getting energy consumption via sysmgmt endpoint on {self.host}: {e}")
+            return None
+        finally:
+            if login_response:
+                try:
+                    logout_url = f"{protocol}{self.host}/sysmgmt/2015/bmc/session"
+                    requests.delete(
+                        logout_url, cookies=login_response.cookies, headers=login_headers, verify=False, timeout=300
+                    )
+                except Exception as e:
+                    _LOGGER.debug(f"Sysmgmt logout on {self.host} failed: {e}")
 
     def update_thermals(self) -> dict:
         try:
@@ -336,6 +392,17 @@ class IdracRest:
             except Exception as e:
                 _LOGGER.debug(f"Couldn't update {self.host} energy consumption via legacy endpoint: {e}")
             # Don't set callbacks to None if we just can't find the energy data
+        else:
+            # There is still a way
+            try:
+                energy_value = self.get_energy_consumption_via_sysmgmt()
+                if energy_value is not None and energy_value != self.energy_consumption:
+                    self.energy_consumption = energy_value
+                    for callback in self.callback_energy_consumption:
+                        callback(self.energy_consumption)
+            except Exception as e:
+                _LOGGER.debug(f"Couldn't update {self.host} energy consumption via sysmgmt endpoint: {e}")
+            
 
 
 class CannotConnect(HomeAssistantError):
