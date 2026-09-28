@@ -1,0 +1,179 @@
+<root><pwState>1</pwState>
+<powerOn></powerOn><sensortype><sensorid>3</sensorid>
+<thresholdSensorList><sensor><sensorStatus>Normal</sensorStatus>
+<name>system board System Level</name>
+<reading>224</reading>
+<units>Watts</units>
+<minWarning>N/A</minWarning>
+<maxWarning>917</maxWarning>
+<minFailure>N/A</minFailure>
+<maxFailure>966</maxFailure>
+</sensor></thresholdSensorList></sensortype><sensortype><sensorid>1</sensorid>
+<thresholdSensorList><sensor><sensorStatus>Normal</sensorStatus>
+<name>system board ambient</name>
+<reading>26</reading>
+<units>C</units>
+<minWarning>8</minWarning>
+<maxWarning>45</maxWarning>
+<minFailure>3</minFailure>
+<maxFailure>50</maxFailure>
+</sensor></thresholdSensorList></sensortype><sensortype><sensorid>4</sensorid>
+<thresholdSensorList><sensor><sensorStatus>Normal</sensorStatus>
+<name>system board MOD 1A</name>
+<reading>3480</reading>
+<units>RPM</units>
+<minWarning>N/A</minWarning>
+<maxWarning>N/A</maxWarning>
+<minFailure>720</minFailure>
+<maxFailure>N/A</maxFailure>
+</sensor><sensor><sensorStatus>Normal</sensorStatus>
+<name>system board MOD 2A</name>
+<reading>3360</reading>
+<units>RPM</units>
+<minWarning>N/A</minWarning>
+<maxWarning>N/A</maxWarning>
+<minFailure>720</minFailure>
+<maxFailure>N/A</maxFailure>
+</sensor><sensor><sensorStatus>Normal</sensorStatus>
+<name>system board MOD 3A</name>
+<reading>3480</reading>
+<units>RPM</units>
+<minWarning>N/A</minWarning>
+<maxWarning>N/A</maxWarning>
+<minFailure>720</minFailure>
+<maxFailure>N/A</maxFailure>
+</sensor><sensor><sensorStatus>Normal</sensorStatus>
+<name>system board MOD 4A</name>
+<reading>3360</reading>
+<units>RPM</units>
+<minWarning>N/A</minWarning>
+<maxWarning>N/A</maxWarning>
+<minFailure>720</minFailure>
+<maxFailure>N/A</maxFailure>
+</sensor><sensor><sensorStatus>Normal</sensorStatus>
+<name>system board MOD 5A</name>
+<reading>3480</reading>
+<units>RPM</units>
+<minWarning>N/A</minWarning>
+<maxWarning>N/A</maxWarning>
+<minFailure>720</minFailure>
+<maxFailure>N/A</maxFailure>
+</sensor></thresholdSensorList></sensortype><sensortype><sensorid>2</sensorid>
+<discreteSensorList><sensor><sensorStatus>Normal</sensorStatus>
+<name>CPU1 VCORE PG</name>
+<reading>Good</reading>
+</sensor><sensor><sensorStatus>Normal</sensorStatus>
+<name>CPU2 VCORE PG</name>
+<reading>Good</reading>
+</sensor><sensor><sensorStatus>Normal</sensorStatus>
+<name>CPU2 0.75 VTT PG</name>
+<reading>Good</reading>
+</sensor><sensor><sensorStatus>Normal</sensorStatus>
+<name>CPU1 0.75 VTT PG</name>
+<reading>Good</reading>
+</sensor><sensor><sensorStatus>Normal</sensorStatus>
+<name>system board CPU VTT PG</name>
+<reading>Good</reading>
+</sensor><sensor><sensorStatus>Normal</sensorStatus>
+<name>system board 1.5V PG</name>
+<reading>Good</reading>
+</sensor><sensor><sensorStatus>Normal</sensorStatus>
+<name>system board 1.8V PG</name>
+<reading>Good</reading>
+</sensor><sensor><sensorStatus>Normal</sensorStatus>
+<name>system board 5V PG</name>
+<reading>Good</reading>
+</sensor><sensor><sensorStatus>Normal</sensorStatus>
+<name>system board memory CPU2</name>
+<reading>Good</reading>
+</sensor><sensor><sensorStatus>Normal</sensorStatus>
+<name>Riser1 5V Riser PG</name>
+<reading>Good</reading>
+</sensor><sensor><sensorStatus>Normal</sensorStatus>
+<name>system board memory CPU1</name>
+<reading>Good</reading>
+</sensor><sensor><sensorStatus>Normal</sensorStatus>
+<name>system board VTT CPU2</name>
+<reading>Good</reading>
+</sensor><sensor><sensorStatus>Normal</sensorStatus>
+<name>system board VTT CPU1</name>
+<reading>Good</reading>
+</sensor><sensor><sensorStatus>Normal</sensorStatus>
+<name>system board 0.9V PG</name>
+<reading>Good</reading>
+</sensor><sensor><sensorStatus>Normal</sensorStatus>
+<name>system board CPU2 1.8 PLL PG</name>
+<reading>Good</reading>
+</sensor><sensor><sensorStatus>Normal</sensorStatus>
+<name>system board CPU1 1.8 PLL PG</name>
+<reading>Good</reading>
+</sensor><sensor><sensorStatus>Normal</sensorStatus>
+<name>system board 1.1</name>
+<reading>Good</reading>
+</sensor><sensor><sensorStatus>Normal</sensorStatus>
+<name>system board 1.0 LOM</name>
+<reading>Good</reading>
+</sensor><sensor><sensorStatus>Normal</sensorStatus>
+<name>system board 1.0 AUX</name>
+<reading>Good</reading>
+</sensor><sensor><sensorStatus>Normal</sensorStatus>
+<name>PS 1 Voltage</name>
+<reading>236V</reading>
+</sensor><sensor><sensorStatus>Normal</sensorStatus>
+<name>PS 2 Voltage</name>
+<reading>240V</reading>
+</sensor></discreteSensorList></sensortype><sensortype><sensorid>8</sensorid>
+<psSensorList><sensor><sensorStatus>Normal</sensorStatus>
+<location>PS 1 </location>
+<inputWattage>1400</inputWattage>
+<fwVersion>01.01.05</fwVersion>
+<maxWattage>1100</maxWattage>
+<type>AC</type>
+<onlineStatus>Present</onlineStatus>
+</sensor><sensor><sensorStatus>Normal</sensorStatus>
+<location>PS 2 </location>
+<inputWattage>1400</inputWattage>
+<fwVersion>01.01.05</fwVersion>
+<maxWattage>1100</maxWattage>
+<type>AC</type>
+<onlineStatus>Present</onlineStatus>
+</sensor></psSensorList></sensortype><powermonitordata><pmProbeStat></pmProbeStat>
+<pmName></pmName>
+<pmReading>120</pmReading>
+<ampReading1>0.5</ampReading1>
+<ampReading2>0.5</ampReading2>
+<ampReading3>0.0</ampReading3>
+<ampReading4>0.0</ampReading4>
+<ipowerWatts1>120</ipowerWatts1>
+<ptsStc1>Thu Dec 31 2009 11:25:13 AM</ptsStc1>
+<ptsFtc1>Sat Sep 26 2026 05:29:45 AM</ptsFtc1>
+<ptsReadingc1>904.8</ptsReadingc1>
+<ptsFta1>Fri Sep 26 2014 07:28:10 PM</ptsFta1>
+<ptsStmp1>Thu Dec 31 2009 11:26:01 AM</ptsStmp1>
+<ptsReadinga1>1.5</ptsReadinga1>
+<ptsFtw1>Sun Mar 01 2026 08:51:40 PM</ptsFtw1>
+<ptsReadingw1>336</ptsReadingw1>
+<pcAveLm>220</pcAveLm>
+<pcAveLh>219</pcAveLh>
+<pcAveDay>217</pcAveDay>
+<pcAveLw>217</pcAveLw>
+<pcMaxLm>224</pcMaxLm>
+<pcMaxLh>234</pcMaxLh>
+<pcMaxDay>278</pcMaxDay>
+<pcMaxLw>316</pcMaxLw>
+<pcMaxPtLm>Sat Sep 26 2026 05:29:27 AM</pcMaxPtLm>
+<pcMaxPtLh>Sat Sep 26 2026 05:17:13 AM</pcMaxPtLh>
+<pcMaxPtDay>Fri Sep 25 2026 07:26:29 AM</pcMaxPtDay>
+<pcMaxPtLw>Wed Sep 23 2026 05:20:03 PM</pcMaxPtLw>
+<pcMinLm>216</pcMinLm>
+<pcMinLh>216</pcMinLh>
+<pcMinDay>208</pcMinDay>
+<pcMinLw>200</pcMinLw>
+<pcMinPtLm>Sat Sep 26 2026 05:29:01 AM</pcMinPtLm>
+<pcMinPtLh>Sat Sep 26 2026 04:49:05 AM</pcMinPtLh>
+<pcMinPtDay>Fri Sep 25 2026 08:16:21 AM</pcMinPtDay>
+<pcMinPtLw>Mon Sep 21 2026 08:58:33 AM</pcMinPtLw>
+<hInstantaneous>1180</hInstantaneous>
+<hPeak>1064</hPeak>
+</powermonitordata><status>ok</status>
+</root>

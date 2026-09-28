@@ -21,13 +21,14 @@ def fixture(name: str) -> str:
     return (FIXTURES / name).read_text()
 
 
-def idrac6(aioclient_mock: AiohttpClientMocker, login: str | None = None, poll: str | None = None) -> None:
+def idrac6(aioclient_mock: AiohttpClientMocker, login: str | None = None,
+           poll: str = 'idrac6_poll_r510_on.xml') -> None:
     # iDRAC 6 has no Redfish
     aioclient_mock.get(f'{IDRAC}/redfish/v1/Chassis/System.Embedded.1', status=404, text='<html>not found</html>')
     aioclient_mock.get(f'{IDRAC}/start.html', text='<html></html>')
     aioclient_mock.post(f'{IDRAC}/data/login', text=login or fixture('idrac6_login.xml'))
     aioclient_mock.post(f'{IDRAC}/data?get={INFO_KEYS}', text=fixture('idrac6_info.xml'))
-    aioclient_mock.post(f'{IDRAC}/data?get={POLL_KEYS}', text=poll or fixture('idrac6_poll.xml'))
+    aioclient_mock.post(f'{IDRAC}/data?get={POLL_KEYS}', text=fixture(poll))
     aioclient_mock.post(f'{IDRAC}/data?set=pwState:5', text='<root><status>ok</status></root>')
     aioclient_mock.get(f'{IDRAC}/data/logout', text='')
 
@@ -48,7 +49,7 @@ async def test_flow_falls_back_to_the_web_api(hass: HomeAssistant, aioclient_moc
     result = await hass.config_entries.flow.async_configure(result['flow_id'], {
         'host': '10.0.0.6', 'username': 'root', 'password': 'calvin', 'interval': 300})
     assert result['type'] is FlowResultType.CREATE_ENTRY
-    assert result['title'] == 'PowerEdge R910'
+    assert result['title'] == 'PowerEdge R910 (17JBYX1)'
     assert result['data']['api'] == 'legacy'
     assert result['result'].unique_id == '17JBYX1'
     # The session used for validation is released
@@ -74,28 +75,43 @@ async def test_blocked_address_is_not_a_bad_password(hass: HomeAssistant, aiocli
     assert result['errors'] == {'base': 'cannot_connect'}
 
 
-async def test_idrac6_entities(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker):
-    idrac6(aioclient_mock)
+async def setup_idrac6(hass: HomeAssistant) -> MockConfigEntry:
     entry = MockConfigEntry(domain=DOMAIN, data={
         'host': '10.0.0.6', 'username': 'root', 'password': 'calvin', 'interval': 300, 'api': 'legacy'})
     entry.add_to_hass(hass)
     await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
+    return entry
+
+
+def friendly_states(hass: HomeAssistant) -> dict[str, str]:
+    return {s.attributes.get('friendly_name'): s.state for s in hass.states.async_all()}
+
+
+async def test_idrac6_entities(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker):
+    """Real answer of a running PowerEdge R510, iDRAC6 firmware 2.92."""
+    idrac6(aioclient_mock)
+    entry = await setup_idrac6(hass)
     assert entry.state is ConfigEntryState.LOADED
 
-    states = {s.attributes.get('friendly_name'): s.state for s in hass.states.async_all()}
-    assert states['PowerEdge R910 Power usage'] == '168'
-    assert states['PowerEdge R910 Energy consumption'] == '741.054'
+    states = friendly_states(hass)
+    # systemLevel, as on the iDRAC power page; not pmReading/ipowerWatts1 (118 W)
+    assert states['PowerEdge R910 Power usage'] == '224'
+    assert states['PowerEdge R910 Energy consumption'] == '904.8'
     assert states['PowerEdge R910 Server status'] == 'on'
-    assert states['PowerEdge R910 system board ambient'] == '19'
-    assert states['PowerEdge R910 system board 1'] == '1440'
-    assert states['PowerEdge R910 system board 2'] == '1560'
+    assert states['PowerEdge R910 system board ambient'] == '26'
+    assert states['PowerEdge R910 system board MOD 1A'] == '3480'
+    assert states['PowerEdge R910 system board MOD 5A'] == '3480'
     assert states['PowerEdge R910 PS 1'] == 'off'
-    assert states['PowerEdge R910 PS 2'] == 'on'  # input lost
-    assert states['PowerEdge R910 Hardware health'] == 'on'  # problem, because of PS 2
+    assert states['PowerEdge R910 PS 2'] == 'off'
+    assert states['PowerEdge R910 Hardware health'] == 'off'
 
     registry = er.async_get(hass)
     assert registry.async_get_entity_id('sensor', DOMAIN, '17JBYX1_PowerEdge R910_power')
+
+    # Firmware 2.92 hands out an anti-CSRF token that every query must carry
+    queries = calls(aioclient_mock, '/data')
+    assert queries and all(c[3]['ST2'] == 'a47f9a0ea441fdd5bf59c63f902c03d2' for c in queries)
 
     # The same session serves every poll
     await entry.runtime_data.async_refresh()
@@ -109,12 +125,42 @@ async def test_idrac6_entities(hass: HomeAssistant, aioclient_mock: AiohttpClien
     assert len(calls(aioclient_mock, '/data/logout')) == 1
 
 
+async def test_lost_psu_input_is_a_problem(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker):
+    idrac6(aioclient_mock, poll='idrac6_poll_psu_lost.xml')
+    await setup_idrac6(hass)
+    states = friendly_states(hass)
+    assert states['PowerEdge R910 PS 1'] == 'off'
+    assert states['PowerEdge R910 PS 2'] == 'on'
+    assert states['PowerEdge R910 Hardware health'] == 'on'
+
+
+async def test_server_added_while_off_gets_its_sensors_at_power_on(
+        hass: HomeAssistant, aioclient_mock: AiohttpClientMocker):
+    """Real answer of a powered-off R710: no sensors at all, standby power only."""
+    idrac6(aioclient_mock, poll='idrac6_poll_r710_off.xml')
+    entry = await setup_idrac6(hass)
+    states = friendly_states(hass)
+    assert states['PowerEdge R910 Server status'] == 'off'
+    assert states['PowerEdge R910 Power usage'] == '26'  # pcAveLm
+    assert 'PowerEdge R910 system board ambient' not in states
+
+    aioclient_mock.clear_requests()
+    idrac6(aioclient_mock)
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    states = friendly_states(hass)
+    assert states['PowerEdge R910 Server status'] == 'on'
+    assert states['PowerEdge R910 system board ambient'] == '26'
+    assert states['PowerEdge R910 PS 1'] == 'off'
+    assert states['PowerEdge R910 Hardware health'] == 'off'
+
+
 async def test_expired_session_logs_in_again(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker):
     answers = iter([
-        AiohttpClientMockResponse('POST', URL(IDRAC), text=fixture('idrac6_poll.xml')),
+        AiohttpClientMockResponse('POST', URL(IDRAC), text=fixture('idrac6_poll_r510_on.xml')),
         # The iDRAC forgot the session and sends the browser to its login page
         AiohttpClientMockResponse('POST', URL(IDRAC), status=302, headers={'Location': '/login.html'}),
-        AiohttpClientMockResponse('POST', URL(IDRAC), text=fixture('idrac6_poll.xml')),
+        AiohttpClientMockResponse('POST', URL(IDRAC), text=fixture('idrac6_poll_r510_on.xml')),
     ])
 
     async def poll(method, url, data):

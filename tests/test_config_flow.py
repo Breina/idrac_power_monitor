@@ -22,7 +22,7 @@ async def test_user_flow_accepts_pasted_url(hass: HomeAssistant, aioclient_mock:
     result = await hass.config_entries.flow.async_configure(result['flow_id'], {
         'host': ' https://10.0.0.2/restgui/start.html ', 'username': 'root', 'password': 'calvin', 'interval': 60})
     assert result['type'] is FlowResultType.CREATE_ENTRY
-    assert result['title'] == 'PowerEdge R720'
+    assert result['title'] == 'PowerEdge R720 (CN123)'
     assert result['data'] == {'host': '10.0.0.2', 'username': 'root', 'password': 'calvin', 'interval': 60,
                               'api': 'redfish'}
     assert result['result'].unique_id == 'CN123'

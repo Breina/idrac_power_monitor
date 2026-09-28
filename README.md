@@ -56,6 +56,9 @@ python scripts/idrac_probe.py 192.168.1.120 root calvin --raw
 
 ### 2.0.0
 - iDRAC 6 support through the iDRAC web GUI API, without any new dependency (upstream #32, supersedes upstream PR #44 which needed IPMI)
+  - verified on real PowerEdge R510 and R710 (iDRAC6 firmware 2.92): power from the `systemLevel` sensor shown on the iDRAC power page (`pmReading`/`ipowerWatts1` only cover part of the load), energy from the power tracking counter (`ptsReadingc1`, kWh), standby power from the one-minute average while the host is off
+- Fan, temperature, power supply and health entities appear when the server is powered on, for servers added while off (the iDRAC publishes no sensors then)
+- New entries are titled with the service tag, to tell identical servers apart
 - iDRAC 7/8 without Redfish (old firmware, or Redfish disabled) now fall back to the same web API instead of failing
 - iDRAC 9: fans and temperatures from `ThermalSubsystem`/`Sensors` when `/Thermal` is missing or incomplete, power and energy from `EnvironmentMetrics` (upstream #19, #36, based on upstream PR #38 with its odata path bug fixed and without the hardcoded model list)
 - "Server status" and the power switch now follow the host power state; they used the chassis health state and showed "running" on powered-off servers (upstream #19)

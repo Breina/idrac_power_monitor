@@ -7,19 +7,21 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import IdracConfigEntry
 from .coordinator import IdracCoordinator
-from .entity import IdracEntity
+from .entity import IdracEntity, add_entities_as_they_appear
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: IdracConfigEntry, async_add_entities: AddEntitiesCallback):
     coordinator = entry.runtime_data
-    data = coordinator.data
 
-    entities: list[BinarySensorEntity] = [IdracStatusBinarySensor(coordinator)]
-    if data.health_ok is not None:
-        entities.append(IdracHealthBinarySensor(coordinator))
-    entities += [IdracPsuBinarySensor(coordinator, psu_id, name)
-                 for psu_id, (name, _) in data.power_supplies.items()]
-    async_add_entities(entities)
+    def build():
+        data = coordinator.data
+        yield 'status', lambda: IdracStatusBinarySensor(coordinator)
+        if data.health_ok is not None:
+            yield 'health', lambda: IdracHealthBinarySensor(coordinator)
+        for psu_id, (name, _) in data.power_supplies.items():
+            yield f'psu_{psu_id}', lambda i=psu_id, n=name: IdracPsuBinarySensor(coordinator, i, n)
+
+    add_entities_as_they_appear(coordinator, async_add_entities, build)
 
 
 class IdracStatusBinarySensor(IdracEntity, BinarySensorEntity):
