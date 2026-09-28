@@ -185,3 +185,15 @@ async def test_expired_session_logs_in_again(hass: HomeAssistant, aioclient_mock
     await entry.runtime_data.async_refresh()
     assert entry.runtime_data.last_update_success
     assert len(calls(aioclient_mock, '/data/login')) == 2
+
+
+async def test_powered_off_psus_are_unknown_not_a_problem(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker):
+    """Real answer of a powered-off R710 whose PSUs report "Unknown" ("Present and System is OFF")."""
+    idrac6(aioclient_mock, poll='idrac6_poll_r710_off_psu_unknown.xml')
+    await setup_idrac6(hass)
+    states = friendly_states(hass)
+    assert states['PowerEdge R910 Server status'] == 'off'
+    assert states['PowerEdge R910 PS 1'] == 'unknown'
+    assert states['PowerEdge R910 PS 2'] == 'unknown'
+    # Nothing known yet: no health sensor rather than a false alarm
+    assert states.get('PowerEdge R910 Hardware health') != 'on'

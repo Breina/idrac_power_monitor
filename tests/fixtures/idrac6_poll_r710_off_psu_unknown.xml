@@ -1,0 +1,58 @@
+<root><pwState>0</pwState>
+<sensortype><sensorid>8</sensorid>
+<psSensorList><sensor><sensorStatus>Unknown</sensorStatus>
+<location>PS 1 </location>
+<onlineStatus>Present and System is OFF</onlineStatus>
+<inputWattage>1080</inputWattage>
+<fwVersion>08.07.00</fwVersion>
+<maxWattage>870</maxWattage>
+<type>AC</type>
+</sensor><sensor><sensorStatus>Unknown</sensorStatus>
+<location>PS 2 </location>
+<onlineStatus>Present and System is OFF</onlineStatus>
+<inputWattage>1080</inputWattage>
+<fwVersion>08.07.00</fwVersion>
+<maxWattage>870</maxWattage>
+<type>AC</type>
+</sensor><sensor><sensorStatus>Unknown</sensorStatus>
+<location>system board PS redundancydancy</location>
+</sensor></psSensorList></sensortype><powermonitordata><pmProbeStat></pmProbeStat>
+<pmName></pmName>
+<pmReading>0</pmReading>
+<ampReading1>powerOff</ampReading1>
+<ampReading2>powerOff</ampReading2>
+<ampReading3>powerOff</ampReading3>
+<ampReading4>powerOff</ampReading4>
+<ipowerWatts1>0</ipowerWatts1>
+<ptsStc1>Mon Sep 28 2026 07:01:33 AM</ptsStc1>
+<ptsFtc1>Mon Sep 28 2026 07:17:08 AM</ptsFtc1>
+<ptsReadingc1>0.0</ptsReadingc1>
+<ptsFta1>Mon Sep 28 2026 07:01:39 AM</ptsFta1>
+<ptsStmp1>Thu Jun 18 2026 12:19:29 PM</ptsStmp1>
+<ptsReadinga1>1.2</ptsReadinga1>
+<ptsFtw1>Mon Sep 28 2026 07:01:49 AM</ptsFtw1>
+<ptsReadingw1>242</ptsReadingw1>
+<pcAveLm>26</pcAveLm>
+<pcAveLh>37</pcAveLh>
+<pcAveDay>26</pcAveDay>
+<pcAveLw>26</pcAveLw>
+<pcMaxLm>26</pcMaxLm>
+<pcMaxLh>242</pcMaxLh>
+<pcMaxDay>242</pcMaxDay>
+<pcMaxLw>242</pcMaxLw>
+<pcMaxPtLm>Mon Sep 28 2026 07:16:05 AM</pcMaxPtLm>
+<pcMaxPtLh>Mon Sep 28 2026 07:00:40 AM</pcMaxPtLh>
+<pcMaxPtDay>Mon Sep 28 2026 07:00:40 AM</pcMaxPtDay>
+<pcMaxPtLw>Mon Sep 28 2026 07:00:40 AM</pcMaxPtLw>
+<pcMinLm>26</pcMinLm>
+<pcMinLh>26</pcMinLh>
+<pcMinDay>26</pcMinDay>
+<pcMinLw>26</pcMinLw>
+<pcMinPtLm>Mon Sep 28 2026 07:16:05 AM</pcMinPtLm>
+<pcMinPtLh>Mon Sep 28 2026 06:28:30 AM</pcMinPtLh>
+<pcMinPtDay>Sun Sep 27 2026 07:28:30 AM</pcMinPtDay>
+<pcMinPtLw>Mon Sep 21 2026 07:28:30 AM</pcMinPtLw>
+<hInstantaneous>1054</hInstantaneous>
+<hPeak>838</hPeak>
+</powermonitordata><status>ok</status>
+</root>
