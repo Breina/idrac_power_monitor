@@ -4,7 +4,7 @@
 
 Monitor and control Dell PowerEdge servers from Home Assistant through their iDRAC, from **iDRAC 6 to iDRAC 9**:
 
-- Server power state, with power on / graceful shutdown (switch and buttons)
+- Server power state, with power on / graceful shutdown (switch and buttons), and forced power off / forced restart buttons for a hung server or one without an operating system to answer the shutdown request
 - Power usage (W) and cumulative energy consumption (kWh, usable in the Energy dashboard)
 - Temperatures and fan speeds
 - Hardware health and per power supply health (problem sensors, e.g. to shut down when a PSU loses input)
@@ -63,6 +63,7 @@ python scripts/idrac_probe.py 192.168.1.120 root calvin --raw
 - iDRAC 9: fans and temperatures from `ThermalSubsystem`/`Sensors` when `/Thermal` is missing or incomplete, power and energy from `EnvironmentMetrics` (upstream #19, #36, based on upstream PR #38 with its odata path bug fixed and without the hardcoded model list)
 - "Server status" and the power switch now follow the host power state; they used the chassis health state and showed "running" on powered-off servers (upstream #19)
 - New hardware health and per power supply problem sensors (upstream #25, #29)
+- Force power off and Force restart buttons, which cut the power or hard-reset the server without asking its operating system (Redfish `ForceOff` / `ForceRestart`, iDRAC 6 `pwState` 0 / 3); power on, graceful shutdown and both forced actions verified on a real R710 (iDRAC6 2.92)
 - Host, username and password can be changed with _Reconfigure_, the polling interval with _Configure_; expired credentials trigger a re-authentication prompt (upstream #37)
 - A pasted `https://…` URL is accepted as host; a server can no longer be added twice
 - Energy: no more `sysmgmt` login on every poll when Redfish already provides the counter; the energy sensor is only created when the iDRAC provides energy data

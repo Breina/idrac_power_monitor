@@ -29,7 +29,8 @@ def idrac6(aioclient_mock: AiohttpClientMocker, login: str | None = None,
     aioclient_mock.post(f'{IDRAC}/data/login', text=login or fixture('idrac6_login.xml'))
     aioclient_mock.post(f'{IDRAC}/data?get={INFO_KEYS}', text=fixture('idrac6_info.xml'))
     aioclient_mock.post(f'{IDRAC}/data?get={POLL_KEYS}', text=fixture(poll))
-    aioclient_mock.post(f'{IDRAC}/data?set=pwState:5', text='<root><status>ok</status></root>')
+    for code in (0, 3, 5):
+        aioclient_mock.post(f'{IDRAC}/data?set=pwState:{code}', text='<root><status>ok</status></root>')
     aioclient_mock.get(f'{IDRAC}/data/logout', text='')
 
 
@@ -120,6 +121,12 @@ async def test_idrac6_entities(hass: HomeAssistant, aioclient_mock: AiohttpClien
     await hass.services.async_call('switch', 'turn_off', {'entity_id': 'switch.poweredge_r910_power'},
                                    blocking=True)
     assert [c for c in calls(aioclient_mock, '/data') if c[1].query.get('set') == 'pwState:5']
+
+    # Forced actions skip the operating system: pwState 0 cuts the power, 3 is a hard reset
+    for button, code in (('force_power_off', 0), ('force_restart', 3)):
+        await hass.services.async_call('button', 'press', {'entity_id': f'button.poweredge_r910_{button}'},
+                                       blocking=True)
+        assert [c for c in calls(aioclient_mock, '/data') if c[1].query.get('set') == f'pwState:{code}']
 
     assert await hass.config_entries.async_unload(entry.entry_id)
     assert len(calls(aioclient_mock, '/data/logout')) == 1

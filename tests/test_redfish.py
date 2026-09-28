@@ -127,3 +127,9 @@ async def test_power_switch_posts_reset(hass: HomeAssistant, aioclient_mock: Aio
     await hass.services.async_call('switch', 'turn_on', {'entity_id': 'switch.poweredge_r720_power'}, blocking=True)
     resets = [call for call in aioclient_mock.mock_calls if str(call[1]).endswith('ComputerSystem.Reset')]
     assert resets and resets[0][2] == {'ResetType': 'On'}
+
+    for button, reset_type in (('force_power_off', 'ForceOff'), ('force_restart', 'ForceRestart')):
+        await hass.services.async_call('button', 'press', {'entity_id': f'button.poweredge_r720_{button}'},
+                                       blocking=True)
+        resets = [call for call in aioclient_mock.mock_calls if str(call[1]).endswith('ComputerSystem.Reset')]
+        assert resets[-1][2] == {'ResetType': reset_type}

@@ -14,7 +14,7 @@ import xml.etree.ElementTree as ET
 import aiohttp
 
 from .client import (
-    POWER_GRACEFUL_SHUTDOWN, POWER_ON, REQUEST_TIMEOUT, CannotConnect, IdracClient, IdracData, IdracInfo,
+    POWER_FORCE_OFF, POWER_FORCE_RESTART, POWER_GRACEFUL_SHUTDOWN, POWER_ON, REQUEST_TIMEOUT, CannotConnect, IdracClient, IdracData, IdracInfo,
     InvalidAuth, Reading, SessionLimit, as_number,
 )
 
@@ -38,7 +38,7 @@ SENSOR_POWER_SUPPLIES = '8'
 
 # /data?set=pwState:<n> (0 off, 1 on, 2 cycle, 3 reset, 4 NMI, 5 graceful shutdown)
 PW_STATE_ON = 1
-POWER_ACTIONS = {POWER_ON: 1, POWER_GRACEFUL_SHUTDOWN: 5}
+POWER_ACTIONS = {POWER_ON: 1, POWER_GRACEFUL_SHUTDOWN: 5, POWER_FORCE_OFF: 0, POWER_FORCE_RESTART: 3}
 
 AUTH_OK = 0
 AUTH_REJECTED = 1
