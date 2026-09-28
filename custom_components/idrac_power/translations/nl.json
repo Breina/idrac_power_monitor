@@ -3,22 +3,54 @@
   "config": {
     "step": {
       "user": {
+        "title": "iDRAC power monitor",
+        "description": "Werkt met iDRAC 6, 7, 8 en 9. Redfish wordt gebruikt indien beschikbaar, anders de iDRAC-webinterface.",
         "data": {
-          "host": "Hostnaam van de iDRAC instantie",
+          "host": "Hostnaam of IP-adres van de iDRAC (zonder https://)",
           "username": "iDRAC gebruikersnaam",
           "password": "iDRAC wachtwoord",
           "interval": "Interval in seconden tussen elke update"
+        }
+      },
+      "reconfigure": {
+        "title": "Verbinding wijzigen",
+        "data": {
+          "host": "Hostnaam of IP-adres van de iDRAC (zonder https://)",
+          "username": "iDRAC gebruikersnaam",
+          "password": "iDRAC wachtwoord"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Inloggegevens geweigerd",
+        "description": "{host} heeft de opgeslagen inloggegevens geweigerd. Voer nieuwe in.",
+        "data": {
+          "username": "iDRAC gebruikersnaam",
+          "password": "iDRAC wachtwoord"
         }
       }
     },
     "error": {
       "cannot_connect": "Kan niet verbinden",
       "invalid_auth": "Foute inloggegevens",
+      "session_limit": "De iDRAC weigerde het inloggen omdat alle sessies bezet zijn. Log uit bij de iDRAC-webinterface (of wacht tot inactieve sessies verlopen) en probeer het opnieuw.",
       "redfish_config": "Redfish staat uit. Start de iDRAC GUI met een web browser en navigeer naar de Network Service pagina - Server -> iDRAC Settings -> Network -> Services -> Redfish. Zie dat het op Enabled staat.",
       "unknown": "Onbekende fout"
     },
     "abort": {
-      "already_configured": "Deze integratie is al geconfigureerd"
+      "already_configured": "Deze server is al geconfigureerd",
+      "wrong_server": "Deze iDRAC beheert een andere server dan die van deze configuratie.",
+      "reconfigure_successful": "Verbinding bijgewerkt",
+      "reauth_successful": "Inloggegevens bijgewerkt"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Updates",
+        "data": {
+          "interval": "Interval in seconden tussen elke update"
+        }
+      }
     }
   }
 }

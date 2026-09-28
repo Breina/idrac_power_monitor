@@ -1,4 +1,4 @@
-name: Validate
+name: Tests
 
 # Blocking at release time only: everything is checked locally before tagging.
 on:
@@ -8,12 +8,12 @@ on:
   workflow_dispatch:
 
 jobs:
-  validate-hacs:
+  pytest:
     runs-on: "ubuntu-latest"
     steps:
       - uses: "actions/checkout@v7.0.1"
-      - name: HACS validation
-        # Its releases are years behind the checks HACS applies today
-        uses: "hacs/action@main"
+      - uses: "actions/setup-python@v7.0.0"
         with:
-          category: "integration"
+          python-version: "3.14"
+      - run: pip install -r requirements_test.txt
+      - run: pytest -q

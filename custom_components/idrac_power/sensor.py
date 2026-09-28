@@ -1,233 +1,89 @@
-"""Platform for iDRAC power sensor integration."""
+"""Power, energy, fan and temperature sensors."""
 from __future__ import annotations
 
-import asyncio
-import logging
-
-from homeassistant.components.sensor import (
-    SensorEntity, 
-    SensorEntityDescription, 
-    SensorStateClass, 
-    SensorDeviceClass
-)
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
+from homeassistant.const import REVOLUTIONS_PER_MINUTE, UnitOfEnergy, UnitOfPower, UnitOfTemperature
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
-from homeassistant.exceptions import PlatformNotReady
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import (DOMAIN, DATA_IDRAC_REST_CLIENT, JSON_MODEL, JSON_MANUFACTURER, JSON_SERIAL_NUMBER, DATA_IDRAC_INFO,
-                    DATA_IDRAC_FIRMWARE, DATA_IDRAC_THERMAL)
-from .idrac_rest import IdracRest, CannotConnect, RedfishConfig
-
-_LOGGER = logging.getLogger(__name__)
-
-protocol = 'https://'
-drac_managers = '/redfish/v1/Managers/iDRAC.Embedded.1'
-drac_chassis_path = '/redfish/v1/Chassis/System.Embedded.1'
-drac_powercontrol_path = '/redfish/v1/Chassis/System.Embedded.1/Power/PowerControl'
+from . import IdracConfigEntry
+from .coordinator import IdracCoordinator
+from .entity import IdracEntity
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
-    """Add iDRAC power sensor entry"""
-    rest_client = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_REST_CLIENT]
+async def async_setup_entry(hass: HomeAssistant, entry: IdracConfigEntry, async_add_entities: AddEntitiesCallback):
+    coordinator = entry.runtime_data
+    data = coordinator.data
 
-    _LOGGER.debug(f"Getting the REST client for {entry.entry_id}")
-
-    try:
-        if DATA_IDRAC_INFO not in hass.data[DOMAIN][entry.entry_id]:
-            info = await hass.async_add_executor_job(target=rest_client.get_device_info)
-            if not info:
-                raise PlatformNotReady(f"Could not set up: device didn't return anything.")
-
-            hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_INFO] = info
-        else:
-            info = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_INFO]
-
-        firmware_version = await hass.async_add_executor_job(target=rest_client.get_firmware_version)
-        if not firmware_version:
-            if DATA_IDRAC_FIRMWARE in hass.data[DOMAIN][entry.entry_id]:
-                firmware_version = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_FIRMWARE]
-        else:
-            hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_FIRMWARE] = firmware_version
-
-        thermal_info = await hass.async_add_executor_job(target=rest_client.update_thermals)
-        if not thermal_info:
-            if DATA_IDRAC_THERMAL in hass.data[DOMAIN][entry.entry_id]:
-                thermal_info = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_THERMAL]
-            else:
-                raise PlatformNotReady(f"Could not set up: couldn't get thermal info.")
-    except (CannotConnect, RedfishConfig) as e:
-        raise PlatformNotReady(str(e)) from e
-
-    model = info[JSON_MODEL]
-    name = model
-    manufacturer = info[JSON_MANUFACTURER]
-    serial = info[JSON_SERIAL_NUMBER]
-
-    device_info = DeviceInfo(
-        identifiers={(DOMAIN, serial)},
-        name=name,
-        manufacturer=manufacturer,
-        model=model,
-        sw_version=firmware_version,
-        serial_number=serial
-    )
-
-    _LOGGER.debug(f"Adding new devices to device info {('serial', serial)}")
-
-    entities = [
-        IdracCurrentPowerSensor(hass, rest_client, device_info, f"{serial}_{name}_power", name),
-        IdracEnergyConsumptionSensor(hass, rest_client, device_info, f"{serial}_{name}_energy", name)
-    ]
-
-    for i, fan in enumerate(thermal_info['Fans']):
-        member_id = fan['MemberId']
-        _LOGGER.info("Adding fan %s : %s", i, fan["FanName"])
-        entities.append(IdracFanSensor(hass, rest_client, device_info, f"{serial}_{name}_fan_{member_id}",
-                                       f"{name} {fan['FanName']}", member_id,
-                                       initial_reading=fan.get('Reading')
-                                       ))
-
-    for i, temp in enumerate(thermal_info['Temperatures']):
-        member_id = temp['MemberId']
-        _LOGGER.info("Adding temp %s : %s", i, temp["Name"])
-        entities.append(IdracTempSensor(hass, rest_client, device_info, f"{serial}_{name}_temp_{member_id}",
-                                        f"{name} {temp['Name']}", member_id,
-                                        initial_reading=temp.get('ReadingCelsius')
-                                        ))
-
+    entities: list[SensorEntity] = [IdracPowerSensor(coordinator)]
+    if data.energy_kwh is not None:
+        entities.append(IdracEnergySensor(coordinator))
+    entities += [IdracFanSensor(coordinator, fan_id, fan.name) for fan_id, fan in data.fans.items()]
+    entities += [IdracTempSensor(coordinator, temp_id, temp.name) for temp_id, temp in data.temperatures.items()]
     async_add_entities(entities)
 
 
-class IdracCurrentPowerSensor(SensorEntity):
-    """The iDRAC's current power sensor entity."""
+class IdracPowerSensor(IdracEntity, SensorEntity):
+    _attr_icon = 'mdi:lightning-bolt'
+    _attr_native_unit_of_measurement = UnitOfPower.WATT
+    _attr_device_class = SensorDeviceClass.POWER
+    _attr_state_class = SensorStateClass.MEASUREMENT
 
-    def __init__(self, hass, rest: IdracRest, device_info, unique_id, name):
-        self.hass = hass
-        self.rest = rest
+    def __init__(self, coordinator: IdracCoordinator):
+        super().__init__(coordinator, 'power', 'Power usage')
 
-        self.entity_description = SensorEntityDescription(
-            key='current_power_usage',
-            name=f"{name} power usage",
-            icon='mdi:lightning-bolt',
-            native_unit_of_measurement='W',
-            device_class=SensorDeviceClass.POWER,
-            state_class=SensorStateClass.MEASUREMENT
-        )
-
-        self._attr_device_info = device_info
-        self._attr_unique_id = unique_id
-        self._attr_has_entity_name = True
-
-        self._attr_native_value = None
-
-        self.rest.register_callback_power_usage(self.update_value)
-
-    def update_value(self, new_value: int | None):
-        if new_value is not None:
-            self._attr_native_value = new_value
-            self._attr_available = True
-        else:
-            self._attr_available = False
-        self.schedule_update_ha_state()
+    @property
+    def native_value(self):
+        return self.coordinator.data.power_watts
 
 
-class IdracFanSensor(SensorEntity):
-    def __init__(self, hass, rest: IdracRest, device_info, unique_id, name, member_id, initial_reading=None):
-        self.hass = hass
-        self.rest = rest
+class IdracEnergySensor(IdracEntity, SensorEntity):
+    _attr_icon = 'mdi:lightning-bolt-circle'
+    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+    _attr_device_class = SensorDeviceClass.ENERGY
+    # The counter can be reset from the iDRAC UI: total_increasing handles that
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
 
-        self.entity_description = SensorEntityDescription(
-            key='fan_speed',
-            name=name,
-            icon='mdi:fan',
-            native_unit_of_measurement='RPM',
-            state_class=SensorStateClass.MEASUREMENT
-        )
+    def __init__(self, coordinator: IdracCoordinator):
+        super().__init__(coordinator, 'energy', 'Energy consumption')
 
-        self._attr_device_info = device_info
-        self._attr_unique_id = unique_id
-        self._attr_has_entity_name = True
-
-        self._attr_native_value = initial_reading
-        self.member_id = member_id
-
-        self.rest.register_callback_thermals(self.update_value)
-
-    def update_value(self, thermal: dict | None):
-        if thermal:
-            for fan in thermal['Fans']:
-                if fan['MemberId'] == self.member_id:
-                    self._attr_native_value = fan['Reading']
-                    break
-            self._attr_available = True
-        else:
-            self._attr_available = False
-        self.schedule_update_ha_state()
+    @property
+    def native_value(self):
+        return self.coordinator.data.energy_kwh
 
 
-class IdracTempSensor(SensorEntity):
-    def __init__(self, hass, rest: IdracRest, device_info, unique_id, name, member_id, initial_reading=None):
-        self.hass = hass
-        self.rest = rest
+class IdracFanSensor(IdracEntity, SensorEntity):
+    _attr_icon = 'mdi:fan'
+    _attr_native_unit_of_measurement = REVOLUTIONS_PER_MINUTE
+    _attr_state_class = SensorStateClass.MEASUREMENT
 
-        self.entity_description = SensorEntityDescription(
-            key='temp',
-            name=name,
-            icon='mdi:thermometer',
-            device_class=SensorDeviceClass.TEMPERATURE,
-            state_class=SensorStateClass.MEASUREMENT,
-            native_unit_of_measurement='°C',
-        )
+    def __init__(self, coordinator: IdracCoordinator, fan_id: str, name: str):
+        super().__init__(coordinator, f'fan_{fan_id}', name)
+        self.fan_id = fan_id
 
-        self._attr_device_info = device_info
-        self._attr_unique_id = unique_id
-        self._attr_has_entity_name = True
-        self._attr_native_value = initial_reading
-        self.member_id = member_id
+    @property
+    def available(self) -> bool:
+        return super().available and self.fan_id in self.coordinator.data.fans
 
-        self.rest.register_callback_thermals(self.update_value)
-
-    def update_value(self, thermal: dict | None):
-        if thermal:
-            for temp in thermal['Temperatures']:
-                if temp['MemberId'] == self.member_id:
-                    self._attr_native_value = temp['ReadingCelsius']
-                    break
-            self._attr_available = True
-        else:
-            self._attr_available = False
-        self.schedule_update_ha_state()
+    @property
+    def native_value(self):
+        return self.coordinator.data.fans[self.fan_id].value
 
 
-class IdracEnergyConsumptionSensor(SensorEntity):
-    """The iDRAC's energy consumption sensor entity."""
+class IdracTempSensor(IdracEntity, SensorEntity):
+    _attr_icon = 'mdi:thermometer'
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_state_class = SensorStateClass.MEASUREMENT
 
-    def __init__(self, hass, rest: IdracRest, device_info, unique_id, name):
-        self.hass = hass
-        self.rest = rest
+    def __init__(self, coordinator: IdracCoordinator, temp_id: str, name: str):
+        super().__init__(coordinator, f'temp_{temp_id}', name)
+        self.temp_id = temp_id
 
-        self.entity_description = SensorEntityDescription(
-            key='energy_consumption',
-            name=f"{name} energy consumption",
-            icon='mdi:lightning-bolt-circle',
-            native_unit_of_measurement='kWh',
-            device_class=SensorDeviceClass.ENERGY,
-            state_class=SensorStateClass.TOTAL_INCREASING
-        )
+    @property
+    def available(self) -> bool:
+        return super().available and self.temp_id in self.coordinator.data.temperatures
 
-        self._attr_device_info = device_info
-        self._attr_unique_id = unique_id
-        self._attr_has_entity_name = True
-
-        self._attr_native_value = None
-
-        self.rest.register_callback_energy_consumption(self.update_value)
-
-    def update_value(self, new_value: float | None):
-        if new_value is not None:
-            self._attr_native_value = new_value
-            self._attr_available = True
-        else:
-            self._attr_available = False
-        self.schedule_update_ha_state()
+    @property
+    def native_value(self):
+        return self.coordinator.data.temperatures[self.temp_id].value

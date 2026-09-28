@@ -1,100 +1,64 @@
-"""Platform for iDRAC power sensor integration."""
+"""Server power state, overall health and power supply health."""
 from __future__ import annotations
 
-import logging
-
-from homeassistant.components.binary_sensor import BinarySensorEntity, BinarySensorDeviceClass, \
-    BinarySensorEntityDescription
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.components.binary_sensor import BinarySensorDeviceClass, BinarySensorEntity
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
-from homeassistant.exceptions import PlatformNotReady
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import (DOMAIN, DATA_IDRAC_REST_CLIENT, JSON_MODEL, JSON_MANUFACTURER, JSON_SERIAL_NUMBER,
-                    DATA_IDRAC_FIRMWARE, DATA_IDRAC_INFO)
-from .idrac_rest import IdracRest, CannotConnect, RedfishConfig
-
-_LOGGER = logging.getLogger(__name__)
-
-protocol = 'https://'
-drac_managers = '/redfish/v1/Managers/iDRAC.Embedded.1'
-drac_chassis_path = '/redfish/v1/Chassis/System.Embedded.1'
-drac_powercontrol_path = '/redfish/v1/Chassis/System.Embedded.1/Power/PowerControl'
+from . import IdracConfigEntry
+from .coordinator import IdracCoordinator
+from .entity import IdracEntity
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
-    """Add iDRAC power sensor entry"""
-    rest_client = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_REST_CLIENT]
+async def async_setup_entry(hass: HomeAssistant, entry: IdracConfigEntry, async_add_entities: AddEntitiesCallback):
+    coordinator = entry.runtime_data
+    data = coordinator.data
 
-    try:
-        if DATA_IDRAC_INFO not in hass.data[DOMAIN][entry.entry_id]:
-            info = await hass.async_add_executor_job(target=rest_client.get_device_info)
-            if not info:
-                raise PlatformNotReady("Could not set up: device didn't return anything.")
-
-            hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_INFO] = info
-        else:
-            info = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_INFO]
-
-        firmware_version = await hass.async_add_executor_job(target=rest_client.get_firmware_version)
-        if not firmware_version:
-            if DATA_IDRAC_FIRMWARE in hass.data[DOMAIN][entry.entry_id]:
-                firmware_version = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_FIRMWARE]
-        else:
-            hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_FIRMWARE] = firmware_version
-    except (CannotConnect, RedfishConfig) as e:
-        raise PlatformNotReady(str(e)) from e
-
-    model = info[JSON_MODEL]
-    name = model
-    manufacturer = info[JSON_MANUFACTURER]
-    serial = info[JSON_SERIAL_NUMBER]
-
-    device_info = DeviceInfo(
-        identifiers={(DOMAIN, serial)},
-        name=name,
-        manufacturer=manufacturer,
-        model=model,
-        sw_version=firmware_version,
-        serial_number=serial
-    )
-
-    async_add_entities([
-        IdracStatusBinarySensor(hass, rest_client, device_info, f"{serial}_{name}_status",
-                                f"{name} status"
-                                )
-    ])
+    entities: list[BinarySensorEntity] = [IdracStatusBinarySensor(coordinator)]
+    if data.health_ok is not None:
+        entities.append(IdracHealthBinarySensor(coordinator))
+    entities += [IdracPsuBinarySensor(coordinator, psu_id, name)
+                 for psu_id, (name, _) in data.power_supplies.items()]
+    async_add_entities(entities)
 
 
-class IdracStatusBinarySensor(BinarySensorEntity):
-    """The iDRAC's current power sensor entity."""
+class IdracStatusBinarySensor(IdracEntity, BinarySensorEntity):
+    """Whether the server is powered on (not whether the iDRAC is up)."""
+    _attr_icon = 'mdi:power'
+    _attr_device_class = BinarySensorDeviceClass.RUNNING
 
-    def __init__(self, hass, rest: IdracRest, device_info, unique_id, name):
-        self.hass = hass
-        self.rest = rest
-
-        self.entity_description = BinarySensorEntityDescription(
-            key='status',
-            name=name,
-            icon='mdi:power',
-            device_class=BinarySensorDeviceClass.RUNNING,
-        )
-
-        self._attr_device_info = device_info
-        self._attr_unique_id = unique_id
-        self._attr_has_entity_name = True
-
-        self.rest.register_callback_status(self.update_value)
+    def __init__(self, coordinator: IdracCoordinator):
+        super().__init__(coordinator, 'status', 'Server status')
 
     @property
-    def name(self):
-        """Name of the entity."""
-        return "Server Status"
+    def is_on(self):
+        return self.coordinator.data.power_on
 
-    def update_value(self, status: bool | None):
-        if status is not None:
-            self._attr_is_on = status
-            self._attr_available = True
-        else:
-            self._attr_available = False
-        self.schedule_update_ha_state()
+
+class IdracHealthBinarySensor(IdracEntity, BinarySensorEntity):
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+
+    def __init__(self, coordinator: IdracCoordinator):
+        super().__init__(coordinator, 'health', 'Hardware health')
+
+    @property
+    def is_on(self):
+        healthy = self.coordinator.data.health_ok
+        return None if healthy is None else not healthy
+
+
+class IdracPsuBinarySensor(IdracEntity, BinarySensorEntity):
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+
+    def __init__(self, coordinator: IdracCoordinator, psu_id: str, name: str):
+        super().__init__(coordinator, f'psu_{psu_id}', name)
+        self.psu_id = psu_id
+
+    @property
+    def available(self) -> bool:
+        return super().available and self.psu_id in self.coordinator.data.power_supplies
+
+    @property
+    def is_on(self):
+        healthy = self.coordinator.data.power_supplies[self.psu_id][1]
+        return None if healthy is None else not healthy
