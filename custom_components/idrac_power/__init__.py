@@ -58,5 +58,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: IdracConfigEntry) -> bo
     if unload_ok:
         client = entry.runtime_data.client
         await client.close()
-        await client.session.close()
+        client.session.detach()
     return unload_ok

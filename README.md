@@ -67,6 +67,7 @@ python scripts/idrac_probe.py 192.168.1.120 root calvin --raw
 - Force power off and Force restart buttons, which cut the power or hard-reset the server without asking its operating system (Redfish `ForceOff` / `ForceRestart`, iDRAC 6 `pwState` 0 / 3); power on, graceful shutdown and both forced actions verified on a real R710 (iDRAC6 2.92)
 - Host, username and password can be changed with _Reconfigure_, the polling interval with _Configure_; expired credentials trigger a re-authentication prompt (upstream #37)
 - A pasted `https://…` URL is accepted as host; a server can no longer be added twice
+- The HTTP session is released with `detach()` instead of being closed, as it shares Home Assistant's connector
 - Energy: no more `sysmgmt` login on every poll when Redfish already provides the counter; the energy sensor is only created when the iDRAC provides energy data
 - Rewritten on Home Assistant's `DataUpdateCoordinator` and `aiohttp`: no more blocking `requests` calls, 45 s request timeout instead of 300 s, entities become unavailable when the iDRAC is unreachable
 - Entity unique ids are unchanged: upgrading keeps entity ids and history (friendly names lose the duplicated model, e.g. "PowerEdge R720 Power usage")
