@@ -6,9 +6,6 @@
     "@Xmow49"
   ],
   "config_flow": true,
-  "dependencies": [
-    "http"
-  ],
   "documentation": "https://github.com/Breina/idrac_power_monitor",
   "integration_type": "device",
   "iot_class": "local_polling",

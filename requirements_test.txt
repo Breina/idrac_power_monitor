@@ -1,0 +1,3 @@
+# Home Assistant itself plus the pytest fixtures custom components need; pinned
+# so CI and local runs test against the same Home Assistant.
+pytest-homeassistant-custom-component==0.13.366

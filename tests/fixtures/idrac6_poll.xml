@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root><pwState>1</pwState>
+<powermonitordata><cumReading><time>Fri Mar 10 12:07:06 2017
+</time>
+<totalUsage>741.054</totalUsage>
+</cumReading><presentReading><reading><probeStatus>2</probeStatus>
+<probeName>System Board System Level</probeName>
+<reading>168</reading>
+<warningThreshold>896</warningThreshold>
+</reading></presentReading></powermonitordata>
+<sensortype><sensorid>1</sensorid>
+<thresholdSensorList><sensor><sensorStatus>Normal</sensorStatus>
+<name>system board ambient</name>
+<reading>19</reading>
+<units>C</units>
+</sensor></thresholdSensorList></sensortype>
+<sensortype><sensorid>4</sensorid>
+<thresholdSensorList><sensor><sensorStatus>Normal</sensorStatus>
+<name>system board 1</name>
+<reading>1440</reading>
+<units>RPM</units>
+</sensor><sensor><sensorStatus>Normal</sensorStatus>
+<name>system board 2</name>
+<reading>1560</reading>
+<units>RPM</units>
+</sensor></thresholdSensorList></sensortype>
+<sensortype><sensorid>2</sensorid>
+<discreteSensorList><sensor><sensorStatus>Normal</sensorStatus>
+<name>PS 1 Voltage</name>
+<reading>228V</reading>
+</sensor></discreteSensorList></sensortype>
+<sensortype><sensorid>8</sensorid>
+<psSensorList><sensor><sensorStatus>Normal</sensorStatus>
+<location>PS 1 </location>
+<inputWattage>1400</inputWattage>
+<onlineStatus>Present</onlineStatus>
+</sensor><sensor><sensorStatus>Critical</sensorStatus>
+<location>PS 2 </location>
+<inputWattage>0</inputWattage>
+<onlineStatus>Present | Input lost</onlineStatus>
+</sensor></psSensorList></sensortype>
+<status>ok</status></root>

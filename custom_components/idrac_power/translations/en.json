@@ -3,22 +3,54 @@
   "config": {
     "step": {
       "user": {
+        "title": "iDRAC power monitor",
+        "description": "Works with iDRAC 6, 7, 8 and 9. Redfish is used when available, otherwise the iDRAC web interface.",
         "data": {
-          "host": "Hostname of the iDRAC instance",
+          "host": "Hostname or IP address of the iDRAC (no https://)",
           "username": "iDRAC username",
           "password": "iDRAC password",
           "interval": "Interval in seconds between each poll"
+        }
+      },
+      "reconfigure": {
+        "title": "Change connection settings",
+        "data": {
+          "host": "Hostname or IP address of the iDRAC (no https://)",
+          "username": "iDRAC username",
+          "password": "iDRAC password"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Credentials rejected",
+        "description": "{host} rejected the saved credentials. Enter new ones.",
+        "data": {
+          "username": "iDRAC username",
+          "password": "iDRAC password"
         }
       }
     },
     "error": {
       "cannot_connect": "Cannot connect",
       "invalid_auth": "Invalid credentials",
+      "session_limit": "The iDRAC refused the login because all its sessions are in use. Log out of the iDRAC web interface (or wait for idle sessions to expire) and try again.",
       "redfish_config": "Redfish not enabled. Start the iDRAC GUI with a web browser and traverse to the Network Service page - Server -> iDRAC Settings -> Network -> Services -> Redfish. Verify that Enabled is selected.",
       "unknown": "Unknown error"
     },
     "abort": {
-      "already_configured": "This integration has already been configured"
+      "already_configured": "This server has already been configured",
+      "wrong_server": "This iDRAC manages a different server than the one configured in this entry.",
+      "reconfigure_successful": "Connection settings updated",
+      "reauth_successful": "Credentials updated"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Polling",
+        "data": {
+          "interval": "Interval in seconds between each poll"
+        }
+      }
     }
   }
 }

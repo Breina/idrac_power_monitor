@@ -3,22 +3,54 @@
   "config": {
     "step": {
       "user": {
+        "title": "Moniteur de puissance iDRAC",
+        "description": "Compatible iDRAC 6, 7, 8 et 9. Redfish est utilisé s'il est disponible, sinon l'interface web de l'iDRAC.",
         "data": {
-          "host": "Nom d'hôte de l'instance iDRAC",
+          "host": "Nom d'hôte ou adresse IP de l'iDRAC (sans https://)",
           "username": "Nom d'utilisateur iDRAC",
           "password": "Mot de passe iDRAC",
           "interval": "Intervalle en secondes entre chaque sondage"
+        }
+      },
+      "reconfigure": {
+        "title": "Modifier la connexion",
+        "data": {
+          "host": "Nom d'hôte ou adresse IP de l'iDRAC (sans https://)",
+          "username": "Nom d'utilisateur iDRAC",
+          "password": "Mot de passe iDRAC"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Identifiants refusés",
+        "description": "{host} a refusé les identifiants enregistrés. Saisissez-en de nouveaux.",
+        "data": {
+          "username": "Nom d'utilisateur iDRAC",
+          "password": "Mot de passe iDRAC"
         }
       }
     },
     "error": {
       "cannot_connect": "Impossible de se connecter",
       "invalid_auth": "Informations d'identification invalides",
+      "session_limit": "L'iDRAC a refusé la connexion car toutes ses sessions sont occupées. Déconnectez-vous de l'interface web de l'iDRAC (ou attendez l'expiration des sessions inactives) puis réessayez.",
       "redfish_config": "Redfish n'est pas activé. Démarrez l'interface iDRAC avec un navigateur Web et accédez à la page Serveur -> iDRAC Settings -> Network -> Services -> Redfish. Vérifiez que Enabled est sélectionné.",
       "unknown": "Erreur inconnue"
     },
     "abort": {
-      "already_configured": "Cette intégration a déjà été configurée"
+      "already_configured": "Ce serveur est déjà configuré",
+      "wrong_server": "Cet iDRAC gère un autre serveur que celui de cette entrée.",
+      "reconfigure_successful": "Connexion mise à jour",
+      "reauth_successful": "Identifiants mis à jour"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Sondage",
+        "data": {
+          "interval": "Intervalle en secondes entre chaque sondage"
+        }
+      }
     }
   }
 }

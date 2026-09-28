@@ -4,23 +4,53 @@
     "step": {
       "user": {
         "title": "iDRAC power monitor",
-        "description": "Enter the iDRAC's credentials.",
+        "description": "Works with iDRAC 6, 7, 8 and 9. Redfish is used when available, otherwise the iDRAC web interface.",
         "data": {
-          "host": "[%key:common::config_flow::data::host%]",
-          "username": "[%key:common::config_flow::data::username%]",
-          "password": "[%key:common::config_flow::data::password%]",
-          "interval": "[%key:common::config_flow::data::interval%]"
+          "host": "Hostname or IP address of the iDRAC (no https://)",
+          "username": "iDRAC username",
+          "password": "iDRAC password",
+          "interval": "Interval in seconds between each poll"
+        }
+      },
+      "reconfigure": {
+        "title": "Change connection settings",
+        "data": {
+          "host": "Hostname or IP address of the iDRAC (no https://)",
+          "username": "iDRAC username",
+          "password": "iDRAC password"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Credentials rejected",
+        "description": "{host} rejected the saved credentials. Enter new ones.",
+        "data": {
+          "username": "iDRAC username",
+          "password": "iDRAC password"
         }
       }
     },
     "error": {
       "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
       "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
+      "session_limit": "The iDRAC refused the login because all its sessions are in use. Log out of the iDRAC web interface (or wait for idle sessions to expire) and try again.",
       "redfish_config": "Redfish not enabled. Start the iDRAC GUI with a web browser and traverse to the Network Service page - Server -> iDRAC Settings -> Network -> Services -> Redfish. Verify that Enabled is selected.",
       "unknown": "[%key:common::config_flow::error::unknown%]"
     },
     "abort": {
-      "already_configured": "[%key:common::config_flow::abort::already_configured_device%]"
+      "already_configured": "[%key:common::config_flow::abort::already_configured_device%]",
+      "wrong_server": "This iDRAC manages a different server than the one configured in this entry.",
+      "reconfigure_successful": "[%key:common::config_flow::abort::reconfigure_successful%]",
+      "reauth_successful": "[%key:common::config_flow::abort::reauth_successful%]"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Polling",
+        "data": {
+          "interval": "Interval in seconds between each poll"
+        }
+      }
     }
   }
 }

@@ -1,14 +1,16 @@
 name: Validate with hassfest
 
+# Blocking at release time only: everything is checked locally before tagging.
 on:
   push:
-  pull_request:
-  schedule:
-    - cron: "0 0 * * *"
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
 
 jobs:
   validate:
     runs-on: "ubuntu-latest"
     steps:
-      - uses: "actions/checkout@v3"
+      - uses: "actions/checkout@v7.0.1"
+      # Only published from its default branch
       - uses: home-assistant/actions/hassfest@master

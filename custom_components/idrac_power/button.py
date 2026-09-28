@@ -1,126 +1,47 @@
-"""Platform for iDRAC power button integration."""
+"""Power on / off and manual refresh buttons."""
 from __future__ import annotations
 
 import logging
 
-from homeassistant.components.button import ButtonEntity, ButtonEntityDescription, ButtonDeviceClass
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.components.button import ButtonEntity
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
-from homeassistant.exceptions import PlatformNotReady
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import (DOMAIN, DATA_IDRAC_REST_CLIENT, JSON_MODEL, JSON_MANUFACTURER, JSON_SERIAL_NUMBER, DATA_IDRAC_INFO,
-                    DATA_IDRAC_FIRMWARE)
-from .idrac_rest import IdracRest, CannotConnect, RedfishConfig
+from . import IdracConfigEntry
+from .client import POWER_GRACEFUL_SHUTDOWN, POWER_ON
+from .coordinator import IdracCoordinator
+from .entity import IdracEntity
 
 _LOGGER = logging.getLogger(__name__)
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
-    """Add iDRAC power sensor entry"""
-    rest_client = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_REST_CLIENT]
-
-    try:
-        if DATA_IDRAC_INFO not in hass.data[DOMAIN][entry.entry_id]:
-            info = await hass.async_add_executor_job(target=rest_client.get_device_info)
-            if not info:
-                raise PlatformNotReady("Could not set up: device didn't return anything.")
-
-            hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_INFO] = info
-        else:
-            info = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_INFO]
-
-        firmware_version = await hass.async_add_executor_job(target=rest_client.get_firmware_version)
-        if not firmware_version:
-            if DATA_IDRAC_FIRMWARE in hass.data[DOMAIN][entry.entry_id]:
-                firmware_version = hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_FIRMWARE]
-        else:
-            hass.data[DOMAIN][entry.entry_id][DATA_IDRAC_FIRMWARE] = firmware_version
-    except (CannotConnect, RedfishConfig) as e:
-        raise PlatformNotReady(str(e)) from e
-
-    model = info[JSON_MODEL]
-    name = model
-    manufacturer = info[JSON_MANUFACTURER]
-    serial = info[JSON_SERIAL_NUMBER]
-
-    device_info = DeviceInfo(
-        identifiers={(DOMAIN, serial)},
-        name=name,
-        manufacturer=manufacturer,
-        model=model,
-        sw_version=firmware_version,
-        serial_number=serial
-    )
-
+async def async_setup_entry(hass: HomeAssistant, entry: IdracConfigEntry, async_add_entities: AddEntitiesCallback):
+    coordinator = entry.runtime_data
     async_add_entities([
-        IdracPowerONButton(hass, rest_client, device_info, f"{serial}_{name}_power_on", name),
-        IdracPowerOffButton(hass, rest_client, device_info, f"{serial}_{name}_power_off", name),
-        IdracRefreshButton(hass, rest_client, device_info, f"{serial}_{name}_refresh", name)
+        IdracPowerButton(coordinator, 'power_on', 'Power on', POWER_ON),
+        IdracPowerButton(coordinator, 'power_off', 'Power off', POWER_GRACEFUL_SHUTDOWN),
+        IdracRefreshButton(coordinator),
     ])
 
 
-class IdracPowerONButton(ButtonEntity):
+class IdracPowerButton(IdracEntity, ButtonEntity):
+    _attr_icon = 'mdi:power'
 
-    def __init__(self, hass, rest: IdracRest, device_info, unique_id, name):
-        self.hass = hass
-        self.rest = rest
-
-        self.entity_description = ButtonEntityDescription(
-            key='power_on',
-            name=f"Power on {name}",
-            icon='mdi:power',
-            device_class=ButtonDeviceClass.UPDATE,
-        )
-
-        self._attr_device_info = device_info
-        self._attr_unique_id = unique_id
-        self._attr_has_entity_name = True
+    def __init__(self, coordinator: IdracCoordinator, unique_suffix: str, name: str, action: str):
+        super().__init__(coordinator, unique_suffix, name)
+        self.action = action
 
     async def async_press(self) -> None:
-        await self.hass.async_add_executor_job(self.rest.idrac_reset, 'On')
+        await self.coordinator.client.set_power(self.action)
+        await self.coordinator.async_request_refresh()
 
 
-class IdracPowerOffButton(ButtonEntity):
+class IdracRefreshButton(IdracEntity, ButtonEntity):
+    _attr_icon = 'mdi:refresh'
 
-    def __init__(self, hass, rest: IdracRest, device_info, unique_id, name):
-        self.hass = hass
-        self.rest = rest
-
-        self.entity_description = ButtonEntityDescription(
-            key='power_on',
-            name=f"Power OFF {name}",
-            icon='mdi:power',
-            device_class=ButtonDeviceClass.UPDATE,
-        )
-
-        self._attr_device_info = device_info
-        self._attr_unique_id = unique_id
-        self._attr_has_entity_name = True
+    def __init__(self, coordinator: IdracCoordinator):
+        super().__init__(coordinator, 'refresh', 'Refresh')
 
     async def async_press(self) -> None:
-        await self.hass.async_add_executor_job(self.rest.idrac_reset, 'GracefulShutdown')
-
-
-class IdracRefreshButton(ButtonEntity):
-
-    def __init__(self, hass, rest: IdracRest, device_info, unique_id, name):
-        self.hass = hass
-        self.rest = rest
-
-        self.entity_description = ButtonEntityDescription(
-            key='refresh',
-            name=f"Refresh {name}",
-            icon='mdi:power',
-            device_class=ButtonDeviceClass.UPDATE,
-        )
-
-        self._attr_device_info = device_info
-        self._attr_unique_id = unique_id
-        self._attr_has_entity_name = True
-
-    async def async_press(self) -> None:
-        _LOGGER.info("Refreshing sensors manually")
-        await self.hass.async_add_executor_job(self.rest.update_thermals)
-        await self.hass.async_add_executor_job(self.rest.update_status)
-        await self.hass.async_add_executor_job(self.rest.update_power_usage)
+        _LOGGER.info('Refreshing %s sensors manually', self.coordinator.client.host)
+        await self.coordinator.async_refresh()

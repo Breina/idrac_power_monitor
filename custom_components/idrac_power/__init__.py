@@ -1,91 +1,62 @@
 """iDRAC power usage monitor"""
-import asyncio
+from __future__ import annotations
+
 import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 
-from .const import DOMAIN, DATA_IDRAC_REST_CLIENT, HOST, USERNAME, PASSWORD, CONF_INTERVAL, CONF_INTERVAL_DEFAULT
-from .idrac_rest import IdracMock, IdracRest
+from .client import CannotConnect, InvalidAuth, RedfishConfig, SessionLimit
+from .const import CONF_API, HOST, PASSWORD, USERNAME
+from .coordinator import IdracCoordinator
+from .factory import async_create_client
 
 _LOGGER = logging.getLogger(__name__)
 
+PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.BUTTON, Platform.SWITCH]
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+type IdracConfigEntry = ConfigEntry[IdracCoordinator]
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: IdracConfigEntry) -> bool:
     """Set up the iDRAC connection from a config entry."""
-
-    if entry.data[HOST] == 'MOCK':
-        rest_client = IdracMock(
-            entry.data[HOST],
-            entry.data[USERNAME],
-            entry.data[PASSWORD],
-            entry.data.get(CONF_INTERVAL, CONF_INTERVAL_DEFAULT)
-        )
-    else:
-        rest_client = IdracRest(
-            entry.data[HOST],
-            entry.data[USERNAME],
-            entry.data[PASSWORD],
-            entry.data.get(CONF_INTERVAL, CONF_INTERVAL_DEFAULT)
-        )
-
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
-        DATA_IDRAC_REST_CLIENT: rest_client
-    }
-
-    # Detect firmware version to configure client capabilities
     try:
-        firmware_version = await hass.async_add_executor_job(rest_client.get_firmware_version)
-        if firmware_version:
-            rest_client.configure_firmware(firmware_version)
-    except Exception as e:
-        _LOGGER.warning(f"Could not detect firmware version for {entry.entry_id}: {e}")
+        client, info = await async_create_client(
+            hass, entry.data[HOST], entry.data[USERNAME], entry.data[PASSWORD], entry.data.get(CONF_API)
+        )
+    except InvalidAuth as err:
+        raise ConfigEntryAuthFailed(f'Credentials rejected by {entry.data[HOST]}') from err
+    except (CannotConnect, RedfishConfig, SessionLimit) as err:
+        raise ConfigEntryNotReady(str(err)) from err
 
-    await hass.config_entries.async_forward_entry_setups(
-        entry, [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.BUTTON, Platform.SWITCH]
-    )
+    if CONF_API not in entry.data:
+        # Entries from 1.x: remember what was detected, no probing next time
+        hass.config_entries.async_update_entry(entry, data={**entry.data, CONF_API: client.api})
 
-    async def refresh_sensors_task():
-        while True:
-            _LOGGER.debug("Refreshing sensors")
-            await update_all()
-            await asyncio.sleep(rest_client.interval)
+    coordinator = IdracCoordinator(hass, entry, client, info)
+    try:
+        await coordinator.async_config_entry_first_refresh()
+    except Exception:
+        await client.close()
+        raise
+    entry.runtime_data = coordinator
 
-    async def update_all():
-        try:
-            await hass.async_add_executor_job(rest_client.update_thermals)
-        except Exception as e:
-            # ignore exceptions, just log the error
-            _LOGGER.warning(f"Updating {entry.entry_id} thermals sensors failed:\n{e}")
-
-        try:
-            await hass.async_add_executor_job(rest_client.update_status)
-        except Exception as e:
-            # ignore exceptions, just log the error
-            _LOGGER.warning(f"Updating {entry.entry_id} status sensor failed:\n{e}")
-
-        try:
-            await hass.async_add_executor_job(rest_client.update_power_usage)
-        except Exception as e:
-            # ignore exceptions, just log the error
-            _LOGGER.warning(f"Updating {entry.entry_id} power usage failed:\n{e}")
-
-    task = hass.async_create_background_task(refresh_sensors_task(), f"Update {entry.entry_id} iDRAC task")
-    hass.data[DOMAIN][entry.entry_id]['task'] = task
-
+    entry.async_on_unload(entry.add_update_listener(_async_reload))
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def _async_reload(hass: HomeAssistant, entry: IdracConfigEntry) -> None:
+    await hass.config_entries.async_reload(entry.entry_id)
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: IdracConfigEntry) -> bool:
     """Unload an iDRAC config entry."""
-    hass.data[DOMAIN][entry.entry_id]['task'].cancel()
-
-    unload_ok = await hass.config_entries.async_unload_platforms(
-        entry, [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.BUTTON, Platform.SWITCH]
-    )
-
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id)
-
+        client = entry.runtime_data.client
+        await client.close()
+        await client.session.close()
     return unload_ok

@@ -3,22 +3,54 @@
   "config": {
     "step": {
       "user": {
+        "title": "Monitor de energia iDRAC",
+        "description": "Funciona com iDRAC 6, 7, 8 e 9. O Redfish é usado quando disponível; caso contrário, a interface web do iDRAC.",
         "data": {
-          "host": "Nome do host da instância iDRAC",
+          "host": "Nome do host ou endereço IP do iDRAC (sem https://)",
           "username": "Nome de utilizador iDRAC",
           "password": "Palavra-passe iDRAC",
           "interval": "Intervalo em segundos entre cada consulta"
+        }
+      },
+      "reconfigure": {
+        "title": "Alterar a ligação",
+        "data": {
+          "host": "Nome do host ou endereço IP do iDRAC (sem https://)",
+          "username": "Nome de utilizador iDRAC",
+          "password": "Palavra-passe iDRAC"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Credenciais recusadas",
+        "description": "{host} recusou as credenciais guardadas. Introduza novas.",
+        "data": {
+          "username": "Nome de utilizador iDRAC",
+          "password": "Palavra-passe iDRAC"
         }
       }
     },
     "error": {
       "cannot_connect": "Não é possível ligar",
       "invalid_auth": "Credenciais inválidas",
+      "session_limit": "O iDRAC recusou o início de sessão porque todas as sessões estão ocupadas. Termine a sessão na interface web do iDRAC (ou aguarde que as sessões inativas expirem) e tente novamente.",
       "redfish_config": "Redfish não está ativado. Inicie a GUI do iDRAC num navegador da web e navegue até à página Serviço de Rede - Servidor -> Configurações iDRAC -> Rede -> Serviços -> Redfish. Verifique se a opção Ativado está selecionada.",
       "unknown": "Erro desconhecido"
     },
     "abort": {
-      "already_configured": "Esta integração já foi configurada"
+      "already_configured": "Este servidor já foi configurado",
+      "wrong_server": "Este iDRAC gere um servidor diferente do desta configuração.",
+      "reconfigure_successful": "Ligação atualizada",
+      "reauth_successful": "Credenciais atualizadas"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Consulta",
+        "data": {
+          "interval": "Intervalo em segundos entre cada consulta"
+        }
+      }
     }
   }
 }
