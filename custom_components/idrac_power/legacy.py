@@ -27,10 +27,12 @@ LOGOUT = '/data/logout'
 DATA = '/data'
 
 INFO_KEYS = 'sysDesc,svcTag,hostName,fwVersion'
-POLL_KEYS = 'pwState,powermonitordata,temperatures,fans,voltages,powerSupplies'
+POLL_KEYS = 'pwState,systemLevel,powermonitordata,temperatures,fans,voltages,powerSupplies'
 
 # <sensortype><sensorid>
 SENSOR_TEMPERATURES = '1'
+# systemLevel: whole-server input power, what the iDRAC 6 power page shows
+SENSOR_SYSTEM_LEVEL = '3'
 SENSOR_FANS = '4'
 SENSOR_POWER_SUPPLIES = '8'
 
@@ -173,7 +175,7 @@ class IdracLegacy(IdracClient):
     async def fetch_energy(self) -> float | None:
         """Cumulative energy only; used by the Redfish client on iDRAC 7/8."""
         root = await self._query({'get': 'powermonitordata'})
-        return _number(_text(root, './/cumReading/totalUsage'))
+        return _number(_text(root, './/cumReading/totalUsage') or _text(root, './/ptsReadingc1'))
 
     async def set_power(self, action: str) -> None:
         root = await self._query({'set': f'pwState:{POWER_ACTIONS[action]}'})
@@ -199,9 +201,12 @@ def parse_poll(root: ET.Element) -> IdracData:
     pw_state = _number(_text(root, './/pwState'))
     data.power_on = None if pw_state is None else pw_state == PW_STATE_ON
 
-    data.power_watts = _number(_text(root, './/powermonitordata/presentReading/reading/reading')
-                               or _text(root, './/powermonitordata/ipowerWatts1'))
-    data.energy_kwh = _number(_text(root, './/powermonitordata/cumReading/totalUsage'))
+    # iDRAC 7/8 layout; iDRAC 6 instead has flat pts*/pc* fields, where
+    # ipowerWatts1/pmReading only cover part of the load (122 W on a server
+    # drawing 224 W), so its power comes from the systemLevel sensor below.
+    data.power_watts = _number(_text(root, './/powermonitordata/presentReading/reading/reading'))
+    data.energy_kwh = _number(_text(root, './/powermonitordata/cumReading/totalUsage')
+                              or _text(root, './/powermonitordata/ptsReadingc1'))
 
     statuses: list[bool | None] = []
     for sensor_type in root.iter('sensortype'):
@@ -217,7 +222,9 @@ def parse_poll(root: ET.Element) -> IdracData:
             name = _text(sensor, 'name')
             if not name:
                 continue
-            if kind == SENSOR_TEMPERATURES:
+            if kind == SENSOR_SYSTEM_LEVEL:
+                data.power_watts = _number(_text(sensor, 'reading'))
+            elif kind == SENSOR_TEMPERATURES:
                 data.temperatures[name] = Reading(name, _number(_text(sensor, 'reading')))
             elif kind == SENSOR_FANS:
                 data.fans[name] = Reading(name, _number(_text(sensor, 'reading')))
@@ -225,4 +232,8 @@ def parse_poll(root: ET.Element) -> IdracData:
     # No single health key on iDRAC 6: unhealthy when any sensor is Warning/Critical
     known = [status for status in statuses if status is not None]
     data.health_ok = all(known) if known else None
+    if data.power_watts is None:
+        # No systemLevel sensor while the host is off: the one-minute average
+        # still measures what the server draws in standby (26 W on an R710).
+        data.power_watts = _number(_text(root, './/powermonitordata/pcAveLm'))
     return data

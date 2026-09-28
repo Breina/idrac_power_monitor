@@ -1,0 +1,41 @@
+<root><pwState>0</pwState>
+<powermonitordata><pmProbeStat></pmProbeStat>
+<pmName></pmName>
+<pmReading>0</pmReading>
+<ampReading1>powerOff</ampReading1>
+<ampReading2>powerOff</ampReading2>
+<ampReading3>powerOff</ampReading3>
+<ampReading4>powerOff</ampReading4>
+<ipowerWatts1>0</ipowerWatts1>
+<ptsStc1>Thu Jan 01 1970 12:00:00 AM</ptsStc1>
+<ptsFtc1>Fri Feb 06 1970 01:46:47 PM</ptsFtc1>
+<ptsReadingc1>0.0</ptsReadingc1>
+<ptsFta1>Thu Jun 18 2026 03:36:45 PM</ptsFta1>
+<ptsStmp1>Thu Jun 18 2026 12:19:29 PM</ptsStmp1>
+<ptsReadinga1>0.7</ptsReadinga1>
+<ptsFtw1>Thu Jun 18 2026 03:35:31 PM</ptsFtw1>
+<ptsReadingw1>146</ptsReadingw1>
+<pcAveLm>26</pcAveLm>
+<pcAveLh>26</pcAveLh>
+<pcAveDay>26</pcAveDay>
+<pcAveLw>26</pcAveLw>
+<pcMaxLm>26</pcMaxLm>
+<pcMaxLh>26</pcMaxLh>
+<pcMaxDay>26</pcMaxDay>
+<pcMaxLw>26</pcMaxLw>
+<pcMaxPtLm>Fri Feb 06 1970 01:45:46 PM</pcMaxPtLm>
+<pcMaxPtLh>Fri Feb 06 1970 01:00:03 PM</pcMaxPtLh>
+<pcMaxPtDay>Thu Feb 05 1970 02:00:03 PM</pcMaxPtDay>
+<pcMaxPtLw>Fri Jan 30 1970 02:00:03 PM</pcMaxPtLw>
+<pcMinLm>26</pcMinLm>
+<pcMinLh>26</pcMinLh>
+<pcMinDay>26</pcMinDay>
+<pcMinLw>26</pcMinLw>
+<pcMinPtLm>Fri Feb 06 1970 01:45:46 PM</pcMinPtLm>
+<pcMinPtLh>Fri Feb 06 1970 01:00:03 PM</pcMinPtLh>
+<pcMinPtDay>Thu Feb 05 1970 02:00:03 PM</pcMinPtDay>
+<pcMinPtLw>Fri Jan 30 1970 02:00:03 PM</pcMinPtLw>
+<hInstantaneous>0</hInstantaneous>
+<hPeak>0</hPeak>
+</powermonitordata><status>ok</status>
+</root>

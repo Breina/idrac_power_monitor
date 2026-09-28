@@ -63,7 +63,8 @@ class IdracConfigFlow(ConfigFlow, domain=DOMAIN):
             if not errors:
                 await self.async_set_unique_id(info.serial)
                 self._abort_if_unique_id_configured()
-                return self.async_create_entry(title=info.model, data={**user_input, CONF_API: api})
+                return self.async_create_entry(title=f'{info.model} ({info.serial})',
+                                               data={**user_input, CONF_API: api})
 
         schema = _connection_schema(user_input or {}).extend({
             vol.Required(CONF_INTERVAL, default=CONF_INTERVAL_DEFAULT): INTERVAL,

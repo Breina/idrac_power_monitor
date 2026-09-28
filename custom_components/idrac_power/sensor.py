@@ -8,19 +8,23 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import IdracConfigEntry
 from .coordinator import IdracCoordinator
-from .entity import IdracEntity
+from .entity import IdracEntity, add_entities_as_they_appear
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: IdracConfigEntry, async_add_entities: AddEntitiesCallback):
     coordinator = entry.runtime_data
-    data = coordinator.data
 
-    entities: list[SensorEntity] = [IdracPowerSensor(coordinator)]
-    if data.energy_kwh is not None:
-        entities.append(IdracEnergySensor(coordinator))
-    entities += [IdracFanSensor(coordinator, fan_id, fan.name) for fan_id, fan in data.fans.items()]
-    entities += [IdracTempSensor(coordinator, temp_id, temp.name) for temp_id, temp in data.temperatures.items()]
-    async_add_entities(entities)
+    def build():
+        data = coordinator.data
+        yield 'power', lambda: IdracPowerSensor(coordinator)
+        if data.energy_kwh is not None:
+            yield 'energy', lambda: IdracEnergySensor(coordinator)
+        for fan_id, fan in data.fans.items():
+            yield f'fan_{fan_id}', lambda i=fan_id, n=fan.name: IdracFanSensor(coordinator, i, n)
+        for temp_id, temp in data.temperatures.items():
+            yield f'temp_{temp_id}', lambda i=temp_id, n=temp.name: IdracTempSensor(coordinator, i, n)
+
+    add_entities_as_they_appear(coordinator, async_add_entities, build)
 
 
 class IdracPowerSensor(IdracEntity, SensorEntity):
