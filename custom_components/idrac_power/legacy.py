@@ -7,15 +7,18 @@ HTTP API it offers; it needs no dependency beyond aiohttp.
 from __future__ import annotations
 
 import asyncio
+import csv
+import io
 import logging
 import re
+from datetime import UTC, datetime
 import xml.etree.ElementTree as ET
 
 import aiohttp
 
 from .client import (
     POWER_FORCE_OFF, POWER_FORCE_RESTART, POWER_GRACEFUL_SHUTDOWN, POWER_ON, REQUEST_TIMEOUT, CannotConnect, IdracClient, IdracData, IdracInfo,
-    InvalidAuth, Reading, SessionLimit, as_number,
+    InvalidAuth, LogEntry, Reading, SessionLimit, as_number, normalize_severity,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -25,6 +28,12 @@ START_PAGE = '/start.html'
 LOGIN = '/data/login'
 LOGOUT = '/data/logout'
 DATA = '/data'
+# The GUI's "Save As" link on the System Event Log page; despite its name it
+# answers CSV or XML depending on the session, so both are parsed.
+EVENT_LOG = '/csvdata'
+EVENT_LOG_KEY = 'eventLogEntriesCSV'
+# The iDRAC clock runs in UTC; records written before it is set say "System Boot"
+EVENT_TIME_FORMAT = '%a %b %d %Y %H:%M:%S'
 
 INFO_KEYS = 'sysDesc,svcTag,hostName,fwVersion'
 POLL_KEYS = 'pwState,systemLevel,powermonitordata,temperatures,fans,voltages,powerSupplies'
@@ -154,6 +163,7 @@ class IdracLegacy(IdracClient):
                     except ET.ParseError as err:
                         raise CannotConnect(f'Unparsable answer from {self.host}: {text[:200]!r}') from err
                     if _text(root, 'status') != 'fail' or attempt == 2:
+                        _check_answers(root, params, self.host)
                         return root
                 # Session timed out, or the iDRAC rebooted: log in again, once
                 _LOGGER.debug('Session on %s rejected (HTTP %s), logging in again', self.host, response.status)
@@ -184,6 +194,30 @@ class IdracLegacy(IdracClient):
         if _text(root, 'status') == 'fail':
             raise CannotConnect(f'{self.host} refused {action}')
         _LOGGER.info('%s sent to %s', action, self.host)
+
+    async def fetch_events(self) -> list[LogEntry] | None:
+        async with self._lock:
+            for attempt in (1, 2):
+                if not self._logged_in:
+                    await self._login()
+                response = await self._request('GET', EVENT_LOG, params={'get': EVENT_LOG_KEY},
+                                               headers=self._headers())
+                text = await response.text()
+                if response.status == 200 and '<html' not in text.lower():
+                    entries = parse_event_log(text)
+                    # Never empty: clearing the log writes a "Log cleared" record
+                    if not entries:
+                        raise CannotConnect(f'{self.host} answered its event log request with something else')
+                    return entries
+                _LOGGER.debug('Event log of %s refused (HTTP %s), logging in again', self.host, response.status)
+                self._logged_in = False
+            raise CannotConnect(f'{self.host} keeps refusing its event log')
+
+    async def clear_events(self) -> None:
+        root = await self._query({'set': 'clearSEL:1'})
+        if _text(root, 'status') == 'fail':
+            raise CannotConnect(f'{self.host} refused to clear its event log')
+        _LOGGER.info('Event log of %s cleared', self.host)
 
     async def close(self) -> None:
         """Free the session: an iDRAC 6 runs out of them quickly."""
@@ -239,3 +273,49 @@ def parse_poll(root: ET.Element) -> IdracData:
         # still measures what the server draws in standby (26 W on an R710).
         data.power_watts = _number(_text(root, './/powermonitordata/pcAveLm'))
     return data
+
+
+def _event_time(value: str | None) -> datetime | None:
+    try:
+        return datetime.strptime((value or '').strip(), EVENT_TIME_FORMAT).replace(tzinfo=UTC)
+    except ValueError:
+        return None  # "System Boot", or empty
+
+
+def parse_event_log(text: str) -> list[LogEntry]:
+    """Parse the System Event Log export, oldest record first.
+
+    The same URL answers either XML (<eventLogEntry> with severity, dateTime,
+    description) or CSV lines ("Critical","Mon Sep 28 2026 07:28:16","Fault
+    detected on Drive 0.").
+    """
+    text = text.strip()
+    if text.startswith('<'):
+        try:
+            root = ET.fromstring(text)
+        except ET.ParseError:
+            return []
+        return [
+            LogEntry(normalize_severity(_text(entry, 'severity')), _event_time(_text(entry, 'dateTime')),
+                     (_text(entry, 'description') or '').strip())
+            for entry in root.iter('eventLogEntry')
+        ]
+    return [
+        LogEntry(normalize_severity(row[0]), _event_time(row[1]), row[2].strip())
+        for row in csv.reader(io.StringIO(text))
+        if len(row) >= 3
+    ]
+
+
+def _check_answers(root: ET.Element, params: dict[str, str], host: str) -> None:
+    """Make sure the answer is to this request.
+
+    An iDRAC 6 web server can fall out of step and hand every request the
+    answer to an earlier one (seen after GET requests on /data, which its own
+    GUI never sends); only an iDRAC reset brings it back. Parsing such an
+    answer would publish another request's data, e.g. a server "off".
+    """
+    wanted = params.get('get', '').split(',')[0]
+    if wanted and root.find(f'.//{wanted}') is None and _text(root, 'status') != 'fail':
+        raise CannotConnect(f'{host} answered with data for another request (expected <{wanted}>): '
+                            'its web server is out of step, reset the iDRAC')

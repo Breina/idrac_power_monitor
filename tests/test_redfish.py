@@ -14,6 +14,12 @@ IDRAC8 = {
     f'{CHASSIS}': {'Name': 'Computer System Chassis', 'Manufacturer': 'Dell Inc.',
                    'Model': 'PowerEdge R720', 'SerialNumber': 'CN123', 'Status': {'State': 'Enabled'}},
     f'{BASE}/Managers/iDRAC.Embedded.1': {'FirmwareVersion': '2.86.86.86'},
+    # Newest first, as iDRAC 9 lists them: the integration orders them by record id
+    f'{BASE}/Managers/iDRAC.Embedded.1/LogServices/Sel/Entries': {'Members': [
+        {'Id': '2', 'Created': '2026-09-28T07:28:16-05:00', 'Severity': 'Critical',
+         'Message': 'Fault detected on drive 0 in disk drive bay 1.'},
+        {'Id': '1', 'Created': '2026-06-18T15:32:54-05:00', 'Severity': 'OK', 'Message': 'Log cleared.'},
+    ]},
     # Chassis says "Enabled" while the host is off: status must follow PowerState
     f'{BASE}/Systems/System.Embedded.1': {'PowerState': 'Off', 'Status': {'HealthRollup': 'Warning'}},
     f'{CHASSIS}/Power': {
@@ -134,3 +140,22 @@ async def test_power_switch_posts_reset(hass: HomeAssistant, aioclient_mock: Aio
                                        blocking=True)
         resets = [call for call in aioclient_mock.mock_calls if str(call[1]).endswith('ComputerSystem.Reset')]
         assert resets[-1][2] == {'ResetType': reset_type}
+
+
+async def test_event_log_from_redfish(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker):
+    serve(aioclient_mock, IDRAC8)
+    aioclient_mock.get('https://10.0.0.2/start.html', status=404)
+    aioclient_mock.post('https://10.0.0.2/data/login', status=404)
+    aioclient_mock.post('https://10.0.0.2/sysmgmt/2015/bmc/session', status=404)
+    aioclient_mock.post(f'{BASE}/Managers/iDRAC.Embedded.1/LogServices/Sel/Actions/LogService.ClearLog', status=204)
+    await setup(hass)
+
+    last = hass.states.get('sensor.poweredge_r720_last_event')
+    assert last.state == 'Fault detected on drive 0 in disk drive bay 1.'
+    assert last.attributes['severity'] == 'critical'
+    assert last.attributes['time'] == '2026-09-28T07:28:16-05:00'
+    assert hass.states.get('binary_sensor.poweredge_r720_event_log_problem').state == 'on'
+
+    await hass.services.async_call('button', 'press', {'entity_id': 'button.poweredge_r720_clear_event_log'},
+                                   blocking=True)
+    assert [call for call in aioclient_mock.mock_calls if str(call[1]).endswith('LogService.ClearLog')]

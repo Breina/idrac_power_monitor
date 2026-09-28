@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+from datetime import datetime
 
 import aiohttp
 
@@ -14,10 +15,12 @@ from .client import (
     IdracData,
     IdracInfo,
     InvalidAuth,
+    LogEntry,
     Reading,
     RedfishConfig,
     SessionLimit,
     as_number,
+    normalize_severity,
 )
 from .legacy import IdracLegacy
 
@@ -28,6 +31,8 @@ MANAGER = '/redfish/v1/Managers/iDRAC.Embedded.1'
 SYSTEM = '/redfish/v1/Systems/System.Embedded.1'
 RESET = '/redfish/v1/Systems/System.Embedded.1/Actions/ComputerSystem.Reset'
 CHASSIS = '/redfish/v1/Chassis/System.Embedded.1'
+SEL_ENTRIES = MANAGER + '/LogServices/Sel/Entries'
+SEL_CLEAR = MANAGER + '/LogServices/Sel/Actions/LogService.ClearLog'
 POWER = CHASSIS + '/Power'
 THERMAL = CHASSIS + '/Thermal'
 # Newer schema, the only one left on recent iDRAC 9 firmware
@@ -340,6 +345,30 @@ class IdracRedfish(IdracClient):
             except (aiohttp.ClientError, TimeoutError) as err:
                 _LOGGER.debug('sysmgmt logout on %s failed: %s', self.host, err)
 
+    async def fetch_events(self) -> list[LogEntry] | None:
+        entries = await self.get_json(SEL_ENTRIES)
+        if entries is None:
+            return None
+        members = entries.get('Members') or []
+
+        def order(member: dict):
+            record = str(member.get('Id', ''))
+            return (0, int(record)) if record.isdigit() else (1, member.get('Created') or '')
+
+        return [
+            LogEntry(normalize_severity(member.get('Severity')), _redfish_time(member.get('Created')),
+                     (member.get('Message') or '').strip())
+            for member in sorted(members, key=order)
+        ]
+
+    async def clear_events(self) -> None:
+        response = await self._request('POST', SEL_CLEAR, json={})
+        if response.status in (401, 403):
+            raise InvalidAuth()
+        if response.status >= 300:
+            raise CannotConnect(f'Clearing the event log of {self.host} returned HTTP {response.status}')
+        _LOGGER.info('Event log of %s cleared', self.host)
+
     async def set_power(self, action: str) -> None:
         response = await self._request('POST', RESET, json={'ResetType': action})
         if response.status in (401, 403):
@@ -357,3 +386,10 @@ class IdracRedfish(IdracClient):
     async def close(self) -> None:
         if self._data_api is not None:
             await self._data_api.close()
+
+
+def _redfish_time(value: str | None) -> datetime | None:
+    try:
+        return datetime.fromisoformat(value) if value else None
+    except ValueError:
+        return None

@@ -8,6 +8,7 @@ Monitor and control Dell PowerEdge servers from Home Assistant through their iDR
 - Power usage (W) and cumulative energy consumption (kWh, usable in the Energy dashboard)
 - Temperatures and fan speeds
 - Hardware health and per power supply health (problem sensors, e.g. to shut down when a PSU loses input)
+- System Event Log: the newest record, a problem sensor while the log holds a warning or a critical record (a failed drive, a lost power supply), a button to clear it, and an `idrac_power_event` event for every new record
 
 No extra Python dependency: everything goes through the iDRAC's own HTTPS APIs.
 
@@ -40,7 +41,31 @@ The API is detected when the server is added and remembered.
 
 Host, username and password can be changed later with _Reconfigure_ on the integration entry; the polling interval with _Configure_.
 
+## Event log notifications
+
+Every new System Event Log record fires an `idrac_power_event` event (`name`, `host`, `serial`, `severity` = `ok` / `warning` / `critical`, `time`, `message`). The records already in the log when Home Assistant starts are not announced again. For example:
+
+```yaml
+automation:
+  - alias: iDRAC event log
+    triggers:
+      - trigger: event
+        event_type: idrac_power_event
+        event_data:
+          severity: critical
+    actions:
+      - action: notify.notify
+        data:
+          title: "{{ trigger.event.data.name }}"
+          message: "{{ trigger.event.data.message }}"
+```
+
+"Event log problem" stays on until the log is cleared with the "Clear event log" button, as the server's own front panel does. The log is read at most once a minute, whatever the polling interval.
+
 ## Troubleshooting
+
+If an iDRAC 6 entry goes unavailable with "answered with data for another request" in the log, its web server has fallen out of step and hands every request an earlier answer. Reset the iDRAC (web interface, or `racadm racreset soft` over SSH): the server itself is not affected.
+
 
 `scripts/idrac_probe.py` queries an iDRAC with the integration's own code and prints what it reads (`--raw` adds the XML of the iDRAC 6 web API). Run it from a clone of this repository in an environment where Home Assistant is installed, and attach its output to issues about missing or wrong readings:
 
@@ -53,6 +78,11 @@ python scripts/idrac_probe.py 192.168.1.120 root calvin --raw
 ![Alt text](imgs/entities.png)
 
 ## Changelog
+
+### Unreleased
+- System Event Log: "Last event" sensor (newest record; the ten latest as attributes), "Event log problem" sensor (on while the log holds a warning or critical record), "Clear event log" button, and an `idrac_power_event` event per new record for notifications. iDRAC 6 through the GUI's log export, iDRAC 7/8/9 through Redfish `LogServices/Sel`. Read at most once a minute; a failed read keeps the last log instead of failing the poll
+- iDRAC 6: every answer is checked against its request. An iDRAC whose web server has fallen out of step (seen on a real R710, answering each request with the one two requests earlier) now makes the entities unavailable instead of publishing another request's data
+- Verified on a real R510 and three R710s (iDRAC6 2.92): logs with drive faults and power supply losses read in about a second
 
 ### 2.0.0
 - iDRAC 6 support through the iDRAC web GUI API, without any new dependency (upstream #32, supersedes upstream PR #44 which needed IPMI)

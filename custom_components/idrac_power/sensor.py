@@ -9,6 +9,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from . import IdracConfigEntry
 from .coordinator import IdracCoordinator
 from .entity import IdracEntity, add_entities_as_they_appear
+from .events import RECENT, as_dict, problems
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: IdracConfigEntry, async_add_entities: AddEntitiesCallback):
@@ -23,6 +24,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: IdracConfigEntry, async_
             yield f'fan_{fan_id}', lambda i=fan_id, n=fan.name: IdracFanSensor(coordinator, i, n)
         for temp_id, temp in data.temperatures.items():
             yield f'temp_{temp_id}', lambda i=temp_id, n=temp.name: IdracTempSensor(coordinator, i, n)
+        if data.events is not None:
+            yield 'last_event', lambda: IdracLastEventSensor(coordinator)
 
     add_entities_as_they_appear(coordinator, async_add_entities, build)
 
@@ -91,3 +94,28 @@ class IdracTempSensor(IdracEntity, SensorEntity):
     @property
     def native_value(self):
         return self.coordinator.data.temperatures[self.temp_id].value
+
+
+class IdracLastEventSensor(IdracEntity, SensorEntity):
+    """Newest System Event Log record; the latest ones as attributes."""
+    _attr_icon = 'mdi:text-box-search-outline'
+
+    def __init__(self, coordinator: IdracCoordinator):
+        super().__init__(coordinator, 'last_event', 'Last event')
+
+    @property
+    def native_value(self):
+        events = self.coordinator.data.events
+        return events[-1].message[:255] if events else None
+
+    @property
+    def extra_state_attributes(self):
+        events = self.coordinator.data.events or []
+        last = events[-1] if events else None
+        return {
+            'time': last.created.isoformat() if last and last.created else None,
+            'severity': last.severity if last else None,
+            'entries': len(events),
+            'problems': len(problems(events)),
+            'recent': [as_dict(entry) for entry in reversed(events[-RECENT:])],
+        }

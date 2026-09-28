@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 
 from homeassistant.components.button import ButtonDeviceClass, ButtonEntity
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -15,7 +16,7 @@ from .client import (
     POWER_ON,
 )
 from .coordinator import IdracCoordinator
-from .entity import IdracEntity
+from .entity import IdracEntity, add_entities_as_they_appear
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -30,6 +31,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: IdracConfigEntry, async_
                          ButtonDeviceClass.RESTART),
         IdracRefreshButton(coordinator),
     ])
+
+    def build():
+        if coordinator.data.events is not None:
+            yield 'clear_event_log', lambda: IdracClearEventLogButton(coordinator)
+
+    add_entities_as_they_appear(coordinator, async_add_entities, build)
 
 
 class IdracPowerButton(IdracEntity, ButtonEntity):
@@ -56,3 +63,15 @@ class IdracRefreshButton(IdracEntity, ButtonEntity):
     async def async_press(self) -> None:
         _LOGGER.info('Refreshing %s sensors manually', self.coordinator.client.host)
         await self.coordinator.async_refresh()
+
+
+class IdracClearEventLogButton(IdracEntity, ButtonEntity):
+    """Empty the System Event Log, once what it reported has been dealt with."""
+    _attr_icon = 'mdi:notification-clear-all'
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(self, coordinator: IdracCoordinator):
+        super().__init__(coordinator, 'clear_event_log', 'Clear event log')
+
+    async def async_press(self) -> None:
+        await self.coordinator.async_clear_events()

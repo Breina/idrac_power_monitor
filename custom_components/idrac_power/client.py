@@ -5,6 +5,7 @@ import ssl
 import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from datetime import datetime
 
 import aiohttp
 from homeassistant.exceptions import HomeAssistantError
@@ -55,6 +56,30 @@ class Reading:
     value: float | None
 
 
+# Event log severities, the same whatever the iDRAC calls them
+SEVERITY_OK = 'ok'
+SEVERITY_WARNING = 'warning'
+SEVERITY_CRITICAL = 'critical'
+
+
+def normalize_severity(value: str | None) -> str | None:
+    """iDRAC 6 says Normal/Warning/Critical, Redfish OK/Warning/Critical."""
+    value = (value or '').strip().lower()
+    if value in ('normal', 'ok', 'info', 'informational'):
+        return SEVERITY_OK
+    if value in (SEVERITY_WARNING, SEVERITY_CRITICAL):
+        return value
+    return None
+
+
+@dataclass(frozen=True)
+class LogEntry:
+    """One System Event Log record. `created` is None for "System Boot" records (clock not set yet)."""
+    severity: str | None
+    created: datetime | None
+    message: str
+
+
 @dataclass
 class IdracData:
     """One poll's worth of data. None means "not available on this iDRAC"."""
@@ -66,6 +91,8 @@ class IdracData:
     temperatures: dict[str, Reading] = field(default_factory=dict)
     # PSU id -> (name, healthy)
     power_supplies: dict[str, tuple[str, bool | None]] = field(default_factory=dict)
+    # System Event Log, oldest first; None when this iDRAC does not provide it
+    events: list[LogEntry] | None = None
 
 
 def as_number(value) -> float | int | None:
@@ -137,6 +164,14 @@ class IdracClient(ABC):
     @abstractmethod
     async def fetch(self) -> IdracData:
         """Poll every sensor. Raises CannotConnect / InvalidAuth when the iDRAC is unusable."""
+
+    async def fetch_events(self) -> list[LogEntry] | None:
+        """The System Event Log, oldest first, or None when this API does not expose it."""
+        return None
+
+    async def clear_events(self) -> None:
+        """Empty the System Event Log."""
+        raise HomeAssistantError(f'{self.host} does not support clearing its event log')
 
     @abstractmethod
     async def set_power(self, action: str) -> None:

@@ -1,17 +1,20 @@
 """iDRAC 6 through the web GUI /data API."""
+from datetime import UTC, datetime
 from pathlib import Path
+
+from freezegun.api import FrozenDateTimeFactory
 
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import entity_registry as er
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import MockConfigEntry, async_capture_events
 from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker, AiohttpClientMockResponse
 from yarl import URL
 
 from custom_components.idrac_power.const import DOMAIN
-from custom_components.idrac_power.legacy import INFO_KEYS, POLL_KEYS, escape_credential
+from custom_components.idrac_power.legacy import INFO_KEYS, POLL_KEYS, escape_credential, parse_event_log
 
 FIXTURES = Path(__file__).parent / 'fixtures'
 IDRAC = 'https://10.0.0.6'
@@ -22,7 +25,7 @@ def fixture(name: str) -> str:
 
 
 def idrac6(aioclient_mock: AiohttpClientMocker, login: str | None = None,
-           poll: str = 'idrac6_poll_r510_on.xml') -> None:
+           poll: str = 'idrac6_poll_r510_on.xml', sel: str | None = None) -> None:
     # iDRAC 6 has no Redfish
     aioclient_mock.get(f'{IDRAC}/redfish/v1/Chassis/System.Embedded.1', status=404, text='<html>not found</html>')
     aioclient_mock.get(f'{IDRAC}/start.html', text='<html></html>')
@@ -31,6 +34,8 @@ def idrac6(aioclient_mock: AiohttpClientMocker, login: str | None = None,
     aioclient_mock.post(f'{IDRAC}/data?get={POLL_KEYS}', text=fixture(poll))
     for code in (0, 3, 5):
         aioclient_mock.post(f'{IDRAC}/data?set=pwState:{code}', text='<root><status>ok</status></root>')
+    aioclient_mock.post(f'{IDRAC}/data?set=clearSEL:1', text='<root><status>ok</status></root>')
+    aioclient_mock.get(f'{IDRAC}/csvdata?get=eventLogEntriesCSV', text=sel or fixture('idrac6_sel_r710.csv'))
     aioclient_mock.get(f'{IDRAC}/data/logout', text='')
 
 
@@ -197,3 +202,72 @@ async def test_powered_off_psus_are_unknown_not_a_problem(hass: HomeAssistant, a
     assert states['PowerEdge R910 PS 2'] == 'unknown'
     # Nothing known yet: no health sensor rather than a false alarm
     assert states.get('PowerEdge R910 Hardware health') != 'on'
+
+
+def test_event_log_parses_both_answers():
+    """The same URL answers CSV or XML; real answers of two R710s."""
+    csv_log = parse_event_log(fixture('idrac6_sel_r710.csv'))
+    assert [(e.severity, e.message) for e in csv_log] == [('ok', 'Log cleared.'), ('critical', 'Fault detected on Drive 0.')]
+    assert csv_log[1].created == datetime(2026, 9, 28, 7, 28, 16, tzinfo=UTC)
+    xml_log = parse_event_log(fixture('idrac6_sel_r710.xml'))
+    assert [(e.severity, e.created, e.message) for e in xml_log] == [
+        ('ok', None, 'Log cleared.'),
+        ('critical', None, 'The power input for power supply 2 is lost.'),
+    ]
+
+
+async def test_event_log_entities_notify_and_clear(
+        hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, freezer: FrozenDateTimeFactory):
+    idrac6(aioclient_mock)
+    entry = await setup_idrac6(hass)
+    last = hass.states.get('sensor.poweredge_r910_last_event')
+    assert last.state == 'Fault detected on Drive 0.'
+    assert last.attributes['severity'] == 'critical'
+    assert last.attributes['time'] == '2026-09-28T07:28:16+00:00'
+    assert last.attributes['problems'] == 1
+    assert hass.states.get('binary_sensor.poweredge_r910_event_log_problem').state == 'on'
+
+    # A record that appears later is announced once; the ones already there were not
+    fired = async_capture_events(hass, f'{DOMAIN}_event')
+    aioclient_mock.clear_requests()
+    idrac6(aioclient_mock, sel=fixture('idrac6_sel_r710.csv')
+           + '"Warning","Mon Sep 28 2026 09:02:11","The system board fan speed is less than the lower warning threshold."\n')
+    freezer.tick(61)
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    assert [(e.data['severity'], e.data['message']) for e in fired] == [
+        ('warning', 'The system board fan speed is less than the lower warning threshold.')]
+
+    # Within a minute the log is not read again, however often the sensors are
+    await entry.runtime_data.async_refresh()
+    assert len(calls(aioclient_mock, '/csvdata')) == 1
+
+    await hass.services.async_call('button', 'press', {'entity_id': 'button.poweredge_r910_clear_event_log'},
+                                   blocking=True)
+    assert [c for c in calls(aioclient_mock, '/data') if c[1].query.get('set') == 'clearSEL:1']
+
+
+async def test_answer_to_another_request_is_rejected(
+        hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, freezer: FrozenDateTimeFactory):
+    """An out-of-step iDRAC 6 hands out earlier answers: never publish them as this poll's data."""
+    idrac6(aioclient_mock)
+    entry = await setup_idrac6(hass)
+    assert hass.states.get('switch.poweredge_r910_power').state == 'on'
+    last_event = hass.states.get('sensor.poweredge_r910_last_event').state
+
+    aioclient_mock.clear_requests()
+    idrac6(aioclient_mock, poll='idrac6_info.xml', sel=fixture('idrac6_poll_r510_on.xml'))
+    freezer.tick(61)
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    # The sensors go unavailable rather than showing the server "off"
+    assert hass.states.get('switch.poweredge_r910_power').state == 'unavailable'
+
+    # The event log answered with a poll: the last good log is kept
+    aioclient_mock.clear_requests()
+    idrac6(aioclient_mock, sel=fixture('idrac6_poll_r510_on.xml'))
+    freezer.tick(61)
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    assert hass.states.get('switch.poweredge_r910_power').state == 'on'
+    assert hass.states.get('sensor.poweredge_r910_last_event').state == last_event

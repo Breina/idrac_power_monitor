@@ -8,6 +8,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from . import IdracConfigEntry
 from .coordinator import IdracCoordinator
 from .entity import IdracEntity, add_entities_as_they_appear
+from .events import RECENT, as_dict, problems
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: IdracConfigEntry, async_add_entities: AddEntitiesCallback):
@@ -20,6 +21,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: IdracConfigEntry, async_
             yield 'health', lambda: IdracHealthBinarySensor(coordinator)
         for psu_id, (name, _) in data.power_supplies.items():
             yield f'psu_{psu_id}', lambda i=psu_id, n=name: IdracPsuBinarySensor(coordinator, i, n)
+        if data.events is not None:
+            yield 'event_log', lambda: IdracEventLogBinarySensor(coordinator)
 
     add_entities_as_they_appear(coordinator, async_add_entities, build)
 
@@ -64,3 +67,21 @@ class IdracPsuBinarySensor(IdracEntity, BinarySensorEntity):
     def is_on(self):
         healthy = self.coordinator.data.power_supplies[self.psu_id][1]
         return None if healthy is None else not healthy
+
+
+class IdracEventLogBinarySensor(IdracEntity, BinarySensorEntity):
+    """On while the System Event Log holds a warning or a critical record; clearing the log resets it."""
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+
+    def __init__(self, coordinator: IdracCoordinator):
+        super().__init__(coordinator, 'event_log', 'Event log problem')
+
+    @property
+    def is_on(self):
+        events = self.coordinator.data.events
+        return None if events is None else bool(problems(events))
+
+    @property
+    def extra_state_attributes(self):
+        found = problems(self.coordinator.data.events or [])
+        return {'problems': [as_dict(entry) for entry in reversed(found[-RECENT:])]}
