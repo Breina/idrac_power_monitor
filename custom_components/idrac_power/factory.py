@@ -36,6 +36,8 @@ async def async_create_client(hass: HomeAssistant, host: str, username: str, pas
         api = API_MOCK
     # A dedicated session per iDRAC: the legacy API keeps a session cookie,
     # and iDRACs are usually reached by IP address (hence the unsafe jar).
+    # It shares Home Assistant's connector: release it with detach(), never
+    # close(), which would close the connector under other integrations.
     session = async_create_clientsession(hass, verify_ssl=False, cookie_jar=aiohttp.CookieJar(unsafe=True))
     ssl_context = await _ssl_context(hass)
 
@@ -51,17 +53,17 @@ async def async_create_client(hass: HomeAssistant, host: str, username: str, pas
                 _LOGGER.debug('No usable Redfish on %s (%s), trying the web API', host, err)
                 redfish_error = err
                 continue
-            await session.close()
+            session.detach()
             if isinstance(redfish_error, RedfishConfig):
                 raise redfish_error from err
             raise
         except Exception:
             await client.close()
-            await session.close()
+            session.detach()
             raise
         _LOGGER.info('%s: %s %s (firmware %s) through the %s API', host, info.manufacturer, info.model,
                      info.firmware, candidate)
         return client, info
 
-    await session.close()
+    session.detach()
     raise CannotConnect(f'No usable API on {host}')

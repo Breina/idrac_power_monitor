@@ -51,7 +51,7 @@ class IdracConfigFlow(ConfigFlow, domain=DOMAIN):
             _LOGGER.exception('Unexpected exception')
             return {'base': 'unknown'}, None, None
         await client.close()
-        await client.session.close()
+        client.session.detach()
         return {}, info, client.api
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
