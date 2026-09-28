@@ -13,8 +13,13 @@ from homeassistant.exceptions import HomeAssistantError
 # but a request that has not completed within this delay is a dead one.
 REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=45)
 
+# Redfish ResetType names; the iDRAC 6 client maps them to its pwState codes.
 POWER_ON = 'On'
 POWER_GRACEFUL_SHUTDOWN = 'GracefulShutdown'
+# Cut the power / hard reset without asking the operating system: for a server
+# that is hung, or has no OS to answer the shutdown request.
+POWER_FORCE_OFF = 'ForceOff'
+POWER_FORCE_RESTART = 'ForceRestart'
 
 
 class CannotConnect(HomeAssistantError):

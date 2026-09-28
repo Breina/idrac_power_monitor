@@ -1,7 +1,14 @@
 """Fake iDRAC for UI development: use MOCK as host name."""
 from __future__ import annotations
 
-from .client import POWER_ON, IdracClient, IdracData, IdracInfo, Reading
+from .client import (
+    POWER_FORCE_RESTART,
+    POWER_ON,
+    IdracClient,
+    IdracData,
+    IdracInfo,
+    Reading,
+)
 
 
 class IdracMock(IdracClient):
@@ -29,4 +36,5 @@ class IdracMock(IdracClient):
         )
 
     async def set_power(self, action: str) -> None:
-        self.power_on = action == POWER_ON
+        # A forced restart leaves a running server running; everything else but On stops it.
+        self.power_on = action == POWER_ON or (action == POWER_FORCE_RESTART and self.power_on)
