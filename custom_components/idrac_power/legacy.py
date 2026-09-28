@@ -74,7 +74,9 @@ def _status_ok(sensor: ET.Element) -> bool | None:
     if health is not None:
         return _number(health) == 2
     status = _text(sensor, 'sensorStatus')
-    if status is None or status.isdigit():
+    # A powered-off host reports its PSUs as "Unknown" (onlineStatus "Present and
+    # System is OFF"): nothing is known, which is not a failure.
+    if status is None or status.isdigit() or status.lower() == 'unknown':
         return None
     return status.lower() == 'normal'
 

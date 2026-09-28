@@ -63,6 +63,7 @@ python scripts/idrac_probe.py 192.168.1.120 root calvin --raw
 - iDRAC 9: fans and temperatures from `ThermalSubsystem`/`Sensors` when `/Thermal` is missing or incomplete, power and energy from `EnvironmentMetrics` (upstream #19, #36, based on upstream PR #38 with its odata path bug fixed and without the hardcoded model list)
 - "Server status" and the power switch now follow the host power state; they used the chassis health state and showed "running" on powered-off servers (upstream #19)
 - New hardware health and per power supply problem sensors (upstream #25, #29)
+- A powered-off iDRAC 6 reports its power supplies as "Unknown"; they read as unknown rather than as a problem
 - Force power off and Force restart buttons, which cut the power or hard-reset the server without asking its operating system (Redfish `ForceOff` / `ForceRestart`, iDRAC 6 `pwState` 0 / 3); power on, graceful shutdown and both forced actions verified on a real R710 (iDRAC6 2.92)
 - Host, username and password can be changed with _Reconfigure_, the polling interval with _Configure_; expired credentials trigger a re-authentication prompt (upstream #37)
 - A pasted `https://…` URL is accepted as host; a server can no longer be added twice
