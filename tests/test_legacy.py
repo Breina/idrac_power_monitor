@@ -25,13 +25,14 @@ def fixture(name: str) -> str:
 
 
 def idrac6(aioclient_mock: AiohttpClientMocker, login: str | None = None,
-           poll: str = 'idrac6_poll_r510_on.xml', sel: str | None = None) -> None:
+           poll: str = 'idrac6_poll_r510_on.xml', sel: str | None = None,
+           info: str = 'idrac6_info.xml', poll_text: str | None = None) -> None:
     # iDRAC 6 has no Redfish
     aioclient_mock.get(f'{IDRAC}/redfish/v1/Chassis/System.Embedded.1', status=404, text='<html>not found</html>')
     aioclient_mock.get(f'{IDRAC}/start.html', text='<html></html>')
     aioclient_mock.post(f'{IDRAC}/data/login', text=login or fixture('idrac6_login.xml'))
-    aioclient_mock.post(f'{IDRAC}/data?get={INFO_KEYS}', text=fixture('idrac6_info.xml'))
-    aioclient_mock.post(f'{IDRAC}/data?get={POLL_KEYS}', text=fixture(poll))
+    aioclient_mock.post(f'{IDRAC}/data?get={INFO_KEYS}', text=fixture(info))
+    aioclient_mock.post(f'{IDRAC}/data?get={POLL_KEYS}', text=poll_text or fixture(poll))
     for code in (0, 3, 5):
         aioclient_mock.post(f'{IDRAC}/data?set=pwState:{code}', text='<root><status>ok</status></root>')
     aioclient_mock.post(f'{IDRAC}/data?set=clearSEL:1', text='<root><status>ok</status></root>')

@@ -12,6 +12,7 @@ from .client import (
     IdracData,
     IdracInfo,
     LogEntry,
+    PowerSupply,
     Reading,
 )
 
@@ -41,7 +42,14 @@ class IdracMock(IdracClient):
             health_ok=True,
             fans={'MemberID 1': Reading('First Mock Fan', 1), 'MemberID 2': Reading('Second Mock Fan', 2)},
             temperatures={'MemberID 3': Reading('Mock Temperature', 10)},
-            power_supplies={'PSU1': ('PS1 Status', True), 'PSU2': ('PS2 Status', False)},
+            power_supplies={
+                f'PSU{index}': PowerSupply(f'PS{index} Status', healthy, current=amps, has_current=True,
+                                           load=amps, has_load=True)
+                for index, healthy, amps in ((1, True, 0.6 if self.power_on else None),
+                                             (2, False, 0.4 if self.power_on else None))
+            },
+            psu_redundancy_listed=True,
+            psu_redundancy_ok=False,
         )
 
     async def fetch_events(self) -> list[LogEntry] | None:

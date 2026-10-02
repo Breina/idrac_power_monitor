@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
@@ -17,6 +18,7 @@ from .client import (
     CannotConnect, IdracClient, IdracData, IdracInfo, InvalidAuth, LogEntry, RedfishConfig, SessionLimit,
 )
 from .const import CONF_INTERVAL, CONF_INTERVAL_DEFAULT, DOMAIN
+from .psu import EnergySplit, shares, split_power
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -24,6 +26,12 @@ _LOGGER = logging.getLogger(__name__)
 EVENT_LOG_REFRESH = timedelta(seconds=60)
 # Fired once per new event log record, for automations and notifications
 EVENT_NAME = f'{DOMAIN}_event'
+# Per-PSU energy totals and the counter reading they stop at, per config entry
+ENERGY_STORE_VERSION = 1
+
+
+def energy_store(hass: HomeAssistant, entry: ConfigEntry) -> Store:
+    return Store(hass, ENERGY_STORE_VERSION, f'{DOMAIN}.{entry.entry_id}.psu_energy')
 
 
 def new_entries(old: list[LogEntry], new: list[LogEntry]) -> Iterator[LogEntry]:
@@ -50,6 +58,11 @@ class IdracCoordinator(DataUpdateCoordinator[IdracData]):
         self._events: list[LogEntry] | None = None
         self._events_fetched: datetime | None = None
         self._events_supported = True
+        self._energy_store = energy_store(hass, entry)
+        self._energy: EnergySplit | None = None
+
+    async def _async_setup(self) -> None:
+        self._energy = EnergySplit(await self._energy_store.async_load())
 
     async def _async_update_data(self) -> IdracData:
         try:
@@ -58,9 +71,24 @@ class IdracCoordinator(DataUpdateCoordinator[IdracData]):
             raise ConfigEntryAuthFailed(f'Credentials rejected by {self.client.host}') from err
         except (CannotConnect, RedfishConfig, SessionLimit) as err:
             raise UpdateFailed(str(err)) from err
+        self._split_by_psu(data)
         await self._update_events()
         data.events = self._events
         return data
+
+    def _split_by_psu(self, data: IdracData) -> None:
+        psu_shares = shares(data)
+        data.psu_power = split_power(data, psu_shares)
+        if self._energy.update(data.energy_kwh, psu_shares):
+            # Saved with the counter reading the totals stop at: after a
+            # crash, what was not saved is split again from the counter
+            self._energy_store.async_delay_save(self._energy.as_dict)
+        data.psu_energy = {psu_id: self._energy.energy.get(psu_id, 0.0) for psu_id in psu_shares}
+
+    async def async_shutdown(self) -> None:
+        await super().async_shutdown()
+        if self._energy is not None:
+            await self._energy_store.async_save(self._energy.as_dict())
 
     async def _update_events(self, force: bool = False) -> None:
         """Refresh the event log; a failure keeps the last one rather than failing the poll."""

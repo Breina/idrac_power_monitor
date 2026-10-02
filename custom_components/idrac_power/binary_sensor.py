@@ -19,8 +19,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: IdracConfigEntry, async_
         yield 'status', lambda: IdracStatusBinarySensor(coordinator)
         if data.health_ok is not None:
             yield 'health', lambda: IdracHealthBinarySensor(coordinator)
-        for psu_id, (name, _) in data.power_supplies.items():
-            yield f'psu_{psu_id}', lambda i=psu_id, n=name: IdracPsuBinarySensor(coordinator, i, n)
+        for psu_id, psu in data.power_supplies.items():
+            yield f'psu_{psu_id}', lambda i=psu_id, n=psu.name: IdracPsuBinarySensor(coordinator, i, n)
+        if data.psu_redundancy_listed:
+            yield 'psu_redundancy', lambda: IdracPsuRedundancyBinarySensor(coordinator)
         if data.events is not None:
             yield 'event_log', lambda: IdracEventLogBinarySensor(coordinator)
 
@@ -65,8 +67,25 @@ class IdracPsuBinarySensor(IdracEntity, BinarySensorEntity):
 
     @property
     def is_on(self):
-        healthy = self.coordinator.data.power_supplies[self.psu_id][1]
+        healthy = self.coordinator.data.power_supplies[self.psu_id].healthy
         return None if healthy is None else not healthy
+
+
+class IdracPsuRedundancyBinarySensor(IdracEntity, BinarySensorEntity):
+    """On when the power supplies are no longer redundant; unknown while the host is off."""
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+
+    def __init__(self, coordinator: IdracCoordinator):
+        super().__init__(coordinator, 'psu_redundancy', translation_key='psu_redundancy')
+
+    @property
+    def available(self) -> bool:
+        return super().available and self.coordinator.data.psu_redundancy_listed
+
+    @property
+    def is_on(self):
+        redundant = self.coordinator.data.psu_redundancy_ok
+        return None if redundant is None else not redundant
 
 
 class IdracEventLogBinarySensor(IdracEntity, BinarySensorEntity):

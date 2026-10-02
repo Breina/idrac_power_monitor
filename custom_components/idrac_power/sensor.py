@@ -2,7 +2,14 @@
 from __future__ import annotations
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
-from homeassistant.const import REVOLUTIONS_PER_MINUTE, UnitOfEnergy, UnitOfPower, UnitOfTemperature
+from homeassistant.const import (
+    REVOLUTIONS_PER_MINUTE,
+    EntityCategory,
+    UnitOfElectricCurrent,
+    UnitOfEnergy,
+    UnitOfPower,
+    UnitOfTemperature,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -24,6 +31,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: IdracConfigEntry, async_
             yield f'fan_{fan_id}', lambda i=fan_id, n=fan.name: IdracFanSensor(coordinator, i, n)
         for temp_id, temp in data.temperatures.items():
             yield f'temp_{temp_id}', lambda i=temp_id, n=temp.name: IdracTempSensor(coordinator, i, n)
+        for psu_id in data.psu_power:
+            psu = data.power_supplies[psu_id]
+            yield f'psu_{psu_id}_power', lambda i=psu_id, n=psu.label: IdracPsuPowerSensor(coordinator, i, n)
+            if data.energy_kwh is not None:
+                yield f'psu_{psu_id}_energy', lambda i=psu_id, n=psu.label: IdracPsuEnergySensor(coordinator, i, n)
+        for psu_id, psu in data.power_supplies.items():
+            if psu.has_current:
+                yield f'psu_{psu_id}_current', lambda i=psu_id, n=psu.label: IdracPsuCurrentSensor(coordinator, i, n)
         if data.events is not None:
             yield 'last_event', lambda: IdracLastEventSensor(coordinator)
 
@@ -57,6 +72,74 @@ class IdracEnergySensor(IdracEntity, SensorEntity):
     @property
     def native_value(self):
         return self.coordinator.data.energy_kwh
+
+
+class IdracPsuSensor(IdracEntity, SensorEntity):
+    """A per power supply reading, unavailable while the iDRAC does not list the PSU."""
+
+    def __init__(self, coordinator: IdracCoordinator, psu_id: str, label: str, kind: str):
+        super().__init__(coordinator, f'psu_{psu_id}_{kind}', translation_key=f'psu_{kind}',
+                         placeholders={'psu': label})
+        self.psu_id = psu_id
+
+
+class IdracPsuPowerSensor(IdracPsuSensor):
+    """This PSU's share of the server's measured power (see psu.py)."""
+    _attr_icon = 'mdi:lightning-bolt'
+    _attr_native_unit_of_measurement = UnitOfPower.WATT
+    _attr_device_class = SensorDeviceClass.POWER
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, coordinator: IdracCoordinator, psu_id: str, label: str):
+        super().__init__(coordinator, psu_id, label, 'power')
+
+    @property
+    def available(self) -> bool:
+        return super().available and self.psu_id in self.coordinator.data.psu_power
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.psu_power[self.psu_id]
+
+
+class IdracPsuEnergySensor(IdracPsuSensor):
+    """This PSU's share of the server's energy counter, kept across restarts."""
+    _attr_icon = 'mdi:lightning-bolt-circle'
+    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_suggested_display_precision = 2
+
+    def __init__(self, coordinator: IdracCoordinator, psu_id: str, label: str):
+        super().__init__(coordinator, psu_id, label, 'energy')
+
+    @property
+    def available(self) -> bool:
+        return super().available and self.psu_id in self.coordinator.data.psu_energy
+
+    @property
+    def native_value(self):
+        return round(self.coordinator.data.psu_energy[self.psu_id], 4)
+
+
+class IdracPsuCurrentSensor(IdracPsuSensor):
+    """Input current the iDRAC measures on this PSU (0.1 A steps on iDRAC 6)."""
+    _attr_icon = 'mdi:current-ac'
+    _attr_native_unit_of_measurement = UnitOfElectricCurrent.AMPERE
+    _attr_device_class = SensorDeviceClass.CURRENT
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: IdracCoordinator, psu_id: str, label: str):
+        super().__init__(coordinator, psu_id, label, 'current')
+
+    @property
+    def available(self) -> bool:
+        return super().available and self.psu_id in self.coordinator.data.power_supplies
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.power_supplies[self.psu_id].current
 
 
 class IdracFanSensor(IdracEntity, SensorEntity):

@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from custom_components.idrac_power.client import create_ssl_context  # noqa: E402
 from custom_components.idrac_power.legacy import INFO_KEYS, POLL_KEYS, IdracLegacy  # noqa: E402
+from custom_components.idrac_power.psu import shares  # noqa: E402
 from custom_components.idrac_power.redfish import IdracRedfish  # noqa: E402
 
 
@@ -43,6 +44,7 @@ async def main() -> int:
                 data = await client.fetch()
                 for field, value in vars(data).items():
                     print(f'{field}: {value}')
+                print(f'psu shares: {shares(data)}')
                 if args.raw and isinstance(client, IdracLegacy):
                     for keys in (INFO_KEYS, POLL_KEYS):
                         response = await session.post(f'{client.base_url}/data', params={'get': keys},

@@ -6,8 +6,9 @@ Monitor and control Dell PowerEdge servers from Home Assistant through their iDR
 
 - Server power state, with power on / graceful shutdown (switch and buttons), and forced power off / forced restart buttons for a hung server or one without an operating system to answer the shutdown request
 - Power usage (W) and cumulative energy consumption (kWh, usable in the Energy dashboard)
+- Per power supply power usage, energy consumption and input current, so that each PSU can be counted under the plug or UPS it hangs from (see [Power supplies](#power-supplies))
 - Temperatures and fan speeds
-- Hardware health and per power supply health (problem sensors, e.g. to shut down when a PSU loses input)
+- Hardware health, per power supply health and PSU redundancy (problem sensors, e.g. to shut down when a PSU loses input)
 - System Event Log: the newest record, a problem sensor while the log holds a warning or a critical record (a failed drive, a lost power supply), a button to clear it, and an `idrac_power_event` event for every new record
 
 No extra Python dependency: everything goes through the iDRAC's own HTTPS APIs.
@@ -40,6 +41,19 @@ The API is detected when the server is added and remembered.
 8. Enter the IP address or hostname of the iDRAC, its username (`root` by default) and password (`calvin` by default).
 
 Host, username and password can be changed later with _Reconfigure_ on the integration entry; the polling interval with _Configure_.
+
+## Power supplies
+
+For each power supply the iDRAC measures, there are "PS 1 power usage" (W) and "PS 1 energy consumption" (kWh) sensors, and on iDRAC 6 "PS 1 input current" (A, diagnostic; Redfish has no per-PSU current). With two PSUs fed from two different plugs or UPSs, declare each PSU's energy sensor as _included in_ the device it hangs from in the Energy dashboard, instead of the server's own energy sensor.
+
+The iDRAC measures the power of the whole server; per PSU it only tells how the load is spread (the input current, in 0.1 A steps, on iDRAC 6; the input power on iDRAC 7/8/9 through Redfish). Multiplying a current by the line voltage gives apparent power, not real power: 0.5 A at 240 V on each PSU makes 240 VA on a server that draws 217 W. Each PSU therefore gets its share of the measured total, and PS 1 + PS 2 always equal the server, so nothing is counted twice:
+
+- while the PSUs report their load: in proportion to it (0.5 A and 0.5 A: 108.5 W each of 217 W);
+- otherwise (server off: the iDRAC reports no current), the standby power split equally between the PSUs the iDRAC lists. A powered-off server sometimes answers without any sensor: the per-PSU sensors are then unavailable, rather than guessing how many PSUs it has.
+
+Each increase of the server's energy counter is split the same way, with the shares in force over that interval. The per-PSU energy totals are kept across Home Assistant restarts and never go down, even when the iDRAC counter is reset; energy used while Home Assistant was stopped is split when it starts again. iDRACs that report no per-PSU reading (iDRAC 7/8 through the web API, recent iDRAC 9 firmware without the Redfish `Power` resource) get no per-PSU sensors.
+
+"PSU redundancy" is on (problem) when the power supplies are no longer redundant, and unknown while the server is off.
 
 ## Event log notifications
 
@@ -80,6 +94,10 @@ python scripts/idrac_probe.py 192.168.1.120 root calvin --raw
 ## Changelog
 
 ### Unreleased
+- Per power supply "power usage" (W), "energy consumption" (kWh, for the Energy dashboard) and "input current" (A, diagnostic) sensors: each PSU gets its share of the power and energy the iDRAC measures for the whole server, in proportion to the PSU input currents (iDRAC 6, `ampReading`) or input power (Redfish `PowerSupplies[].PowerInputWatts`), equally while the server is off. The PSU totals always add up to the server's, and the energy totals are kept across restarts and counter resets (see [Power supplies](#power-supplies))
+- New "PSU redundancy" problem sensor. iDRAC 6 lists the redundancy sensor among the power supplies (firmware 2.92 names it "system board PS redundancydancy"), and it showed up as a PSU problem sensor of that name: that entity is no longer created and can be deleted from _Settings_ > _Entities_
+- The new entities' names are translated (English, French, German, Dutch, Portuguese); existing entities and their unique ids are unchanged
+- Verified against real answers of an R510 (running) and three R710s (powered off), iDRAC6 2.92; the Redfish part follows Dell's documented `Power` resource and has not been tried on hardware yet
 - System Event Log: "Last event" sensor (newest record; the ten latest as attributes), "Event log problem" sensor (on while the log holds a warning or critical record), "Clear event log" button, and an `idrac_power_event` event per new record for notifications. iDRAC 6 through the GUI's log export, iDRAC 7/8/9 through Redfish `LogServices/Sel`. Read at most once a minute; a failed read keeps the last log instead of failing the poll
 - iDRAC 6: every answer is checked against its request. An iDRAC whose web server has fallen out of step (seen on a real R710, answering each request with the one two requests earlier) now makes the entities unavailable instead of publishing another request's data
 - Verified on a real R510 and three R710s (iDRAC6 2.92): logs with drive faults and power supply losses read in about a second

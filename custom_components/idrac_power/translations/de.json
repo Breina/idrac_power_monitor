@@ -52,5 +52,23 @@
         }
       }
     }
+  },
+  "entity": {
+    "binary_sensor": {
+      "psu_redundancy": {
+        "name": "Netzteil-Redundanz"
+      }
+    },
+    "sensor": {
+      "psu_power": {
+        "name": "{psu} Leistungsaufnahme"
+      },
+      "psu_energy": {
+        "name": "{psu} Energieverbrauch"
+      },
+      "psu_current": {
+        "name": "{psu} Eingangsstrom"
+      }
+    }
   }
 }

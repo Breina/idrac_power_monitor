@@ -40,12 +40,18 @@ def add_entities_as_they_appear(coordinator: IdracCoordinator, async_add_entitie
 class IdracEntity(CoordinatorEntity[IdracCoordinator]):
     _attr_has_entity_name = True
 
-    def __init__(self, coordinator: IdracCoordinator, unique_suffix: str, name: str | None):
+    def __init__(self, coordinator: IdracCoordinator, unique_suffix: str, name: str | None = None,
+                 translation_key: str | None = None, placeholders: dict[str, str] | None = None):
         super().__init__(coordinator)
         info = coordinator.info
         # Same unique ids as 1.x so upgrades keep entity ids and history
         self._attr_unique_id = f'{info.serial}_{info.model}_{unique_suffix}'
-        self._attr_name = name
+        if translation_key:
+            # Named from translations/, whose English name also makes the entity id
+            self._attr_translation_key = translation_key
+            self._attr_translation_placeholders = placeholders or {}
+        else:
+            self._attr_name = name
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, info.serial)},
             name=info.model,

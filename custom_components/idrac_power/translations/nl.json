@@ -52,5 +52,23 @@
         }
       }
     }
+  },
+  "entity": {
+    "binary_sensor": {
+      "psu_redundancy": {
+        "name": "Redundantie voedingen"
+      }
+    },
+    "sensor": {
+      "psu_power": {
+        "name": "{psu} vermogen"
+      },
+      "psu_energy": {
+        "name": "{psu} energieverbruik"
+      },
+      "psu_current": {
+        "name": "{psu} ingangsstroom"
+      }
+    }
   }
 }

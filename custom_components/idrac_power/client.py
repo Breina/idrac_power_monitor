@@ -1,6 +1,7 @@
 """Backend-agnostic iDRAC client interface, data model and errors."""
 from __future__ import annotations
 
+import re
 import ssl
 import warnings
 from abc import ABC, abstractmethod
@@ -81,6 +82,28 @@ class LogEntry:
 
 
 @dataclass
+class PowerSupply:
+    """One power supply, with what the iDRAC measures of it.
+
+    `load` is a per-PSU reading (input current on iDRAC 6, input watts on
+    Redfish) used only for how the server's measured power is spread between
+    PSUs. A `has_*` flag says the iDRAC reports that reading at all; the value
+    is None while it has none (host off).
+    """
+    name: str
+    healthy: bool | None
+    current: float | None = None
+    has_current: bool = False
+    load: float | None = None
+    has_load: bool = False
+
+    @property
+    def label(self) -> str:
+        """Short name for per-PSU entities: Redfish calls PSUs "PS1 Status"."""
+        return re.sub(r'\s+status$', '', self.name, flags=re.IGNORECASE) or self.name
+
+
+@dataclass
 class IdracData:
     """One poll's worth of data. None means "not available on this iDRAC"."""
     power_on: bool | None = None
@@ -89,8 +112,15 @@ class IdracData:
     health_ok: bool | None = None
     fans: dict[str, Reading] = field(default_factory=dict)
     temperatures: dict[str, Reading] = field(default_factory=dict)
-    # PSU id -> (name, healthy)
-    power_supplies: dict[str, tuple[str, bool | None]] = field(default_factory=dict)
+    power_supplies: dict[str, PowerSupply] = field(default_factory=dict)
+    # The PSU redundancy sensor, which is not a PSU: whether the iDRAC has one,
+    # and whether redundancy is ok (None while unknown, e.g. host off)
+    psu_redundancy_listed: bool = False
+    psu_redundancy_ok: bool | None = None
+    # Set by the coordinator: each PSU's share of power_watts, and of the
+    # energy counter's increases since the integration first saw it
+    psu_power: dict[str, float | None] = field(default_factory=dict)
+    psu_energy: dict[str, float] = field(default_factory=dict)
     # System Event Log, oldest first; None when this iDRAC does not provide it
     events: list[LogEntry] | None = None
 

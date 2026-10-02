@@ -1,0 +1,148 @@
+{
+  "@odata.context": "/redfish/v1/$metadata#Power.Power",
+  "@odata.id": "/redfish/v1/Chassis/System.Embedded.1/Power",
+  "@odata.type": "#Power.v1_5_4.Power",
+  "Description": "Power",
+  "Id": "Power",
+  "Name": "Power",
+  "PowerControl": [
+    {
+      "@odata.id": "/redfish/v1/Chassis/System.Embedded.1/Power#/PowerControl/0",
+      "MemberId": "PowerControl",
+      "Name": "System Power Control",
+      "PowerAllocatedWatts": 1316,
+      "PowerAvailableWatts": 0,
+      "PowerCapacityWatts": 1316,
+      "PowerConsumedWatts": 217,
+      "PowerLimit": {
+        "CorrectionInMs": 0,
+        "LimitException": "HardPowerOff",
+        "LimitInWatts": null
+      },
+      "PowerMetrics": {
+        "AverageConsumedWatts": 219,
+        "IntervalInMin": 60,
+        "MaxConsumedWatts": 286,
+        "MinConsumedWatts": 208
+      },
+      "PowerRequestedWatts": 616,
+      "RelatedItem": [
+        {"@odata.id": "/redfish/v1/Systems/System.Embedded.1"},
+        {"@odata.id": "/redfish/v1/Chassis/System.Embedded.1"}
+      ],
+      "RelatedItem@odata.count": 2
+    }
+  ],
+  "PowerControl@odata.count": 1,
+  "PowerSupplies": [
+    {
+      "@odata.id": "/redfish/v1/Chassis/System.Embedded.1/Power#/PowerSupplies/0",
+      "Assembly": {"@odata.id": "/redfish/v1/Chassis/System.Embedded.1/Assembly"},
+      "EfficiencyPercent": 94,
+      "FirmwareVersion": "00.1D.7D",
+      "HotPluggable": true,
+      "InputRanges": [
+        {
+          "InputType": "AC",
+          "MaximumFrequencyHz": 63,
+          "MaximumVoltage": 264,
+          "MinimumFrequencyHz": 47,
+          "MinimumVoltage": 90,
+          "OutputWattage": 750
+        }
+      ],
+      "InputRanges@odata.count": 1,
+      "LastPowerOutputWatts": 112,
+      "LineInputVoltage": 232,
+      "LineInputVoltageType": "AC240V",
+      "Manufacturer": "DELL",
+      "MemberId": "PSU.Slot.1",
+      "Model": "PWR SPLY,750W,RDNT,DELTA",
+      "Name": "PS1 Status",
+      "PartNumber": "0TFV0YA00",
+      "PowerCapacityWatts": 750,
+      "PowerInputWatts": 128,
+      "PowerSupplyType": "AC",
+      "Redundancy": [
+        {"@odata.id": "/redfish/v1/Chassis/System.Embedded.1/Power#/Redundancy/0"}
+      ],
+      "Redundancy@odata.count": 1,
+      "SerialNumber": "PSUSERIAL0001",
+      "SparePartNumber": "0TFV0YA00",
+      "Status": {"Health": "OK", "State": "Enabled"}
+    },
+    {
+      "@odata.id": "/redfish/v1/Chassis/System.Embedded.1/Power#/PowerSupplies/1",
+      "Assembly": {"@odata.id": "/redfish/v1/Chassis/System.Embedded.1/Assembly"},
+      "EfficiencyPercent": 94,
+      "FirmwareVersion": "00.1D.7D",
+      "HotPluggable": true,
+      "InputRanges": [
+        {
+          "InputType": "AC",
+          "MaximumFrequencyHz": 63,
+          "MaximumVoltage": 264,
+          "MinimumFrequencyHz": 47,
+          "MinimumVoltage": 90,
+          "OutputWattage": 750
+        }
+      ],
+      "InputRanges@odata.count": 1,
+      "LastPowerOutputWatts": 84,
+      "LineInputVoltage": 234,
+      "LineInputVoltageType": "AC240V",
+      "Manufacturer": "DELL",
+      "MemberId": "PSU.Slot.2",
+      "Model": "PWR SPLY,750W,RDNT,DELTA",
+      "Name": "PS2 Status",
+      "PartNumber": "0TFV0YA00",
+      "PowerCapacityWatts": 750,
+      "PowerInputWatts": 96,
+      "PowerSupplyType": "AC",
+      "Redundancy": [
+        {"@odata.id": "/redfish/v1/Chassis/System.Embedded.1/Power#/Redundancy/0"}
+      ],
+      "Redundancy@odata.count": 1,
+      "SerialNumber": "PSUSERIAL0002",
+      "SparePartNumber": "0TFV0YA00",
+      "Status": {"Health": "OK", "State": "Enabled"}
+    }
+  ],
+  "PowerSupplies@odata.count": 2,
+  "Redundancy": [
+    {
+      "@odata.id": "/redfish/v1/Chassis/System.Embedded.1/Power#/Redundancy/0",
+      "MaxNumSupported": 4,
+      "MemberId": "PSRedundancy",
+      "MinNumNeeded": 2,
+      "Mode": "N+m",
+      "Name": "System Board PS Redundancy",
+      "RedundancySet": [
+        {"@odata.id": "/redfish/v1/Chassis/System.Embedded.1/Power#/PowerSupplies/0"},
+        {"@odata.id": "/redfish/v1/Chassis/System.Embedded.1/Power#/PowerSupplies/1"}
+      ],
+      "RedundancySet@odata.count": 2,
+      "Status": {"Health": "OK", "State": "Enabled"}
+    }
+  ],
+  "Redundancy@odata.count": 1,
+  "Voltages": [
+    {
+      "@odata.id": "/redfish/v1/Chassis/System.Embedded.1/Power#/Voltages/0",
+      "MemberId": "iDRAC.Embedded.1#PS1Voltage1",
+      "Name": "PS1 Voltage 1",
+      "PhysicalContext": "PowerSupply",
+      "ReadingVolts": 232,
+      "Status": {"Health": "OK", "State": "Enabled"}
+    },
+    {
+      "@odata.id": "/redfish/v1/Chassis/System.Embedded.1/Power#/Voltages/1",
+      "MemberId": "iDRAC.Embedded.1#PS2Voltage2",
+      "Name": "PS2 Voltage 2",
+      "PhysicalContext": "PowerSupply",
+      "ReadingVolts": 234,
+      "Status": {"Health": "OK", "State": "Enabled"}
+    }
+  ],
+  "Voltages@odata.count": 2
+}

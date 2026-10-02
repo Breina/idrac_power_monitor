@@ -17,8 +17,9 @@ import xml.etree.ElementTree as ET
 import aiohttp
 
 from .client import (
-    POWER_FORCE_OFF, POWER_FORCE_RESTART, POWER_GRACEFUL_SHUTDOWN, POWER_ON, REQUEST_TIMEOUT, CannotConnect, IdracClient, IdracData, IdracInfo,
-    InvalidAuth, LogEntry, Reading, SessionLimit, as_number, normalize_severity,
+    POWER_FORCE_OFF, POWER_FORCE_RESTART, POWER_GRACEFUL_SHUTDOWN, POWER_ON, REQUEST_TIMEOUT, CannotConnect,
+    IdracClient, IdracData, IdracInfo, InvalidAuth, LogEntry, PowerSupply, Reading, SessionLimit, as_number,
+    normalize_severity,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -44,6 +45,10 @@ SENSOR_TEMPERATURES = '1'
 SENSOR_SYSTEM_LEVEL = '3'
 SENSOR_FANS = '4'
 SENSOR_POWER_SUPPLIES = '8'
+
+# powermonitordata/ampReading<n>: input current of PSU n in A (0.1 A steps), shown
+# as "PS n Current" on the iDRAC 6 power page; "powerOff" while the host is off
+AMP_READING = './/powermonitordata/ampReading{}'
 
 # /data?set=pwState:<n> (0 off, 1 on, 2 cycle, 3 reset, 4 NMI, 5 graceful shutdown)
 PW_STATE_ON = 1
@@ -252,8 +257,11 @@ def parse_poll(root: ET.Element) -> IdracData:
             if kind == SENSOR_POWER_SUPPLIES:
                 # iDRAC 6 names PSUs by <location>, iDRAC 7/8 by <name>
                 name = _text(sensor, 'name') or _text(sensor, 'location')
-                if name:
-                    data.power_supplies[name] = (name, _status_ok(sensor))
+                if name and _is_redundancy(sensor):
+                    data.psu_redundancy_listed = True
+                    data.psu_redundancy_ok = _status_ok(sensor)
+                elif name:
+                    data.power_supplies[name] = _power_supply(root, name, _status_ok(sensor))
                 continue
             name = _text(sensor, 'name')
             if not name:
@@ -273,6 +281,24 @@ def parse_poll(root: ET.Element) -> IdracData:
         # still measures what the server draws in standby (26 W on an R710).
         data.power_watts = _number(_text(root, './/powermonitordata/pcAveLm'))
     return data
+
+
+def _is_redundancy(sensor: ET.Element) -> bool:
+    """The PSU list also holds the redundancy sensor, which is not a PSU.
+
+    iDRAC 6 firmware 2.92 itself calls it "system board PS redundancydancy".
+    """
+    return any('redundan' in (_text(sensor, tag) or '').lower() for tag in ('name', 'location'))
+
+
+def _power_supply(root: ET.Element, name: str, healthy: bool | None) -> PowerSupply:
+    """A PSU, with its input current when the iDRAC reports it (iDRAC 6)."""
+    psu = PowerSupply(name, healthy)
+    number = re.search(r'\d+', name)
+    if number and (reading := root.find(AMP_READING.format(number.group()))) is not None:
+        psu.has_current = psu.has_load = True
+        psu.current = psu.load = _number(reading.text)
+    return psu
 
 
 def _event_time(value: str | None) -> datetime | None:

@@ -16,6 +16,7 @@ from .client import (
     IdracInfo,
     InvalidAuth,
     LogEntry,
+    PowerSupply,
     Reading,
     RedfishConfig,
     SessionLimit,
@@ -47,6 +48,10 @@ LOGGED_RESPONSE_CHARS = 30000
 # iDRAC 9 proprietary web API, used only for the cumulative energy counter
 SYSMGMT_SESSION = '/sysmgmt/2015/bmc/session'
 SYSMGMT_POWER = '/sysmgmt/2015/server/sensor/power'
+
+# Per-PSU readings the server's power is split by, best first: input watts,
+# else output watts (proportional to input, give or take the efficiency)
+PSU_LOADS = ('PowerInputWatts', 'LastPowerOutputWatts')
 
 ENERGY_REDFISH = 'redfish'
 ENERGY_DATA = 'data'
@@ -172,6 +177,9 @@ class IdracRedfish(IdracClient):
             if (energy := as_number(metrics.get('EnergyConsumedKWh'))) is not None:
                 data.energy_kwh = energy
             supplies = power.get('PowerSupplies') or []
+            if redundancy := power.get('Redundancy'):
+                data.psu_redundancy_listed = True
+                data.psu_redundancy_ok = health_ok(redundancy[0].get('Status'))
         else:
             metrics = await self.get_json(ENVIRONMENT_METRICS) or {}
             data.power_watts = as_number((metrics.get('PowerWatts') or {}).get('Reading'))
@@ -180,6 +188,7 @@ class IdracRedfish(IdracClient):
             supplies = await self._members(POWER_SUPPLIES)
 
         skipped = 0
+        present = {}
         for supply in supplies:
             status = supply.get('Status') or {}
             psu_id = stable_id(supply, 'MemberId', 'Id')
@@ -188,7 +197,9 @@ class IdracRedfish(IdracClient):
                 continue
             if status.get('State') == 'Absent':
                 continue
-            data.power_supplies[psu_id] = (supply.get('Name') or psu_id, health_ok(status))
+            present[psu_id] = supply
+            data.power_supplies[psu_id] = PowerSupply(supply.get('Name') or psu_id, health_ok(status))
+        _set_loads(data.power_supplies, present)
         self._log_unidentified(POWER if power is not None else POWER_SUPPLIES, {'power supplies': skipped},
                                 power if power is not None else supplies)
 
@@ -386,6 +397,21 @@ class IdracRedfish(IdracClient):
     async def close(self) -> None:
         if self._data_api is not None:
             await self._data_api.close()
+
+
+def _set_loads(power_supplies: dict[str, PowerSupply], supplies: dict[str, dict]) -> None:
+    """Per-PSU readings from the Power resource; the same one for every PSU, never a mix.
+
+    No input current there: the Redfish Power schema has none per PSU.
+    """
+    reported = [key for key in PSU_LOADS if any(key in supply for supply in supplies.values())]
+    if not reported:
+        return
+    key = next((key for key in reported
+                if all(as_number(supply.get(key)) is not None for supply in supplies.values())), reported[0])
+    for psu_id, psu in power_supplies.items():
+        psu.has_load = True
+        psu.load = as_number(supplies[psu_id].get(key))
 
 
 def _redfish_time(value: str | None) -> datetime | None:

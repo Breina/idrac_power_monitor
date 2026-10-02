@@ -52,5 +52,23 @@
         }
       }
     }
+  },
+  "entity": {
+    "binary_sensor": {
+      "psu_redundancy": {
+        "name": "PSU redundancy"
+      }
+    },
+    "sensor": {
+      "psu_power": {
+        "name": "{psu} power usage"
+      },
+      "psu_energy": {
+        "name": "{psu} energy consumption"
+      },
+      "psu_current": {
+        "name": "{psu} input current"
+      }
+    }
   }
 }

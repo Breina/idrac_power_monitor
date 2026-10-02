@@ -52,5 +52,23 @@
         }
       }
     }
+  },
+  "entity": {
+    "binary_sensor": {
+      "psu_redundancy": {
+        "name": "Redundância das fontes de alimentação"
+      }
+    },
+    "sensor": {
+      "psu_power": {
+        "name": "Potência {psu}"
+      },
+      "psu_energy": {
+        "name": "Consumo de energia {psu}"
+      },
+      "psu_current": {
+        "name": "Corrente de entrada {psu}"
+      }
+    }
   }
 }
