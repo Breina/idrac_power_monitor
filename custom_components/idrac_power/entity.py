@@ -47,7 +47,8 @@ class IdracEntity(CoordinatorEntity[IdracCoordinator]):
         # Same unique ids as 1.x so upgrades keep entity ids and history
         self._attr_unique_id = f'{info.serial}_{info.model}_{unique_suffix}'
         if translation_key:
-            # Named from translations/, whose English name also makes the entity id
+            # Named from translations/; Home Assistant derives the entity id from
+            # the name in its own language (French, German... not only English)
             self._attr_translation_key = translation_key
             self._attr_translation_placeholders = placeholders or {}
         else:
