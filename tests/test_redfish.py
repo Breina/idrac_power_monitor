@@ -36,10 +36,11 @@ def serve(aioclient_mock: AiohttpClientMocker, resources: dict) -> None:
         aioclient_mock.get(url, json=body)
 
 
-async def setup(hass: HomeAssistant, data: dict | None = None) -> MockConfigEntry:
-    entry = MockConfigEntry(domain=DOMAIN, data=data or {
-        'host': '10.0.0.2', 'username': 'root', 'password': 'calvin', 'interval': 300, 'api': 'redfish'})
-    entry.add_to_hass(hass)
+async def setup(hass: HomeAssistant, data: dict | None = None, entry: MockConfigEntry | None = None) -> MockConfigEntry:
+    if entry is None:
+        entry = MockConfigEntry(domain=DOMAIN, data=data or {
+            'host': '10.0.0.2', 'username': 'root', 'password': 'calvin', 'interval': 300, 'api': 'redfish'})
+        entry.add_to_hass(hass)
     await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
     return entry

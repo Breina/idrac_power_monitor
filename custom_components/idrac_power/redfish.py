@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import logging
 
 import aiohttp
@@ -35,6 +36,8 @@ POWER_SUPPLIES = CHASSIS + '/PowerSubsystem/PowerSupplies'
 FANS = CHASSIS + '/ThermalSubsystem/Fans'
 SENSORS = CHASSIS + '/Sensors'
 EXPAND = '?$expand=*($levels=1)'
+# Enough for a whole /Power or /Thermal answer of a 2U server
+LOGGED_RESPONSE_CHARS = 30000
 
 # iDRAC 9 proprietary web API, used only for the cumulative energy counter
 SYSMGMT_SESSION = '/sysmgmt/2015/bmc/session'
@@ -53,6 +56,19 @@ def health_ok(status: dict | None) -> bool | None:
     if health is None:
         return None
     return health == 'OK'
+
+
+def stable_id(item: dict, *keys: str) -> str | None:
+    """The identifier an entity's unique id is built on; None when the item has none.
+
+    Never a list position nor "None": iDRAC 8 now and then puts entries whose
+    every field is null in front of the real ones, and entities registered from
+    those would never be provided again.
+    """
+    for key in keys:
+        if value := item.get(key):
+            return str(value)
+    return None
 
 
 class IdracRedfish(IdracClient):
@@ -158,12 +174,26 @@ class IdracRedfish(IdracClient):
                 data.energy_kwh = energy
             supplies = await self._members(POWER_SUPPLIES)
 
-        for index, supply in enumerate(supplies):
+        skipped = 0
+        for supply in supplies:
             status = supply.get('Status') or {}
+            psu_id = stable_id(supply, 'MemberId', 'Id')
+            if psu_id is None:
+                skipped += 1
+                continue
             if status.get('State') == 'Absent':
                 continue
-            psu_id = str(supply.get('MemberId') or supply.get('Id') or index)
-            data.power_supplies[psu_id] = (supply.get('Name') or f'PSU {index + 1}', health_ok(status))
+            data.power_supplies[psu_id] = (supply.get('Name') or psu_id, health_ok(status))
+        self._log_unidentified(POWER if power is not None else POWER_SUPPLIES, {'power supplies': skipped},
+                                power if power is not None else supplies)
+
+    def _log_unidentified(self, path: str, skipped: dict[str, int], response) -> None:
+        """Log an answer whose items had no identifier, to find out what the iDRAC sent."""
+        if not any(skipped.values()) or not _LOGGER.isEnabledFor(logging.DEBUG):
+            return
+        counts = ', '.join(f'{count} {kind}' for kind, count in skipped.items() if count)
+        _LOGGER.debug('%s on %s returned items without identifiers, skipped: %s. Response: %s',
+                      path, self.host, counts, json.dumps(response, default=str)[:LOGGED_RESPONSE_CHARS])
 
     async def _members(self, collection_path: str, keep=lambda member_id: True) -> list[dict]:
         """Return the members of a collection, expanded in one request when supported."""
@@ -188,14 +218,20 @@ class IdracRedfish(IdracClient):
         if self._thermal_source in (None, 'thermal'):
             thermal = await self.get_json(THERMAL)
             if thermal is not None:
+                skipped = {'fans': 0, 'temperatures': 0}
                 for fan in thermal.get('Fans') or []:
-                    fan_id = str(fan.get('MemberId'))
+                    if (fan_id := stable_id(fan, 'MemberId')) is None:
+                        skipped['fans'] += 1
+                        continue
                     data.fans[fan_id] = Reading(fan.get('FanName') or fan.get('Name') or fan_id,
                                                 as_number(fan.get('Reading')))
                 for temp in thermal.get('Temperatures') or []:
-                    temp_id = str(temp.get('MemberId'))
+                    if (temp_id := stable_id(temp, 'MemberId')) is None:
+                        skipped['temperatures'] += 1
+                        continue
                     data.temperatures[temp_id] = Reading(temp.get('Name') or temp_id,
                                                          as_number(temp.get('ReadingCelsius')))
+                self._log_unidentified(THERMAL, skipped, thermal)
             if self._thermal_source == 'thermal' or (data.fans and data.temperatures):
                 self._thermal_source = 'thermal'
                 return
@@ -203,16 +239,26 @@ class IdracRedfish(IdracClient):
         # iDRAC 9: /Thermal is missing or incomplete, read the ThermalSubsystem
         fans: dict[str, Reading] = {}
         temperatures: dict[str, Reading] = {}
-        for fan in await self._members(FANS):
-            fan_id = str(fan.get('Id'))
+        fan_members = await self._members(FANS)
+        skipped = 0
+        for fan in fan_members:
+            if (fan_id := stable_id(fan, 'Id')) is None:
+                skipped += 1
+                continue
             speed = fan.get('SpeedPercent') or {}
             fans[fan_id] = Reading(fan.get('Name') or fan_id,
                                    as_number(speed.get('SpeedRPM', speed.get('Reading'))))
-        for sensor in await self._members(SENSORS, keep=lambda member_id: 'Temp' in member_id):
+        self._log_unidentified(FANS, {'fans': skipped}, fan_members)
+        sensors = await self._members(SENSORS, keep=lambda member_id: 'Temp' in member_id)
+        skipped = 0
+        for sensor in sensors:
+            if (sensor_id := stable_id(sensor, 'Id')) is None:
+                skipped += 1
+                continue
             if sensor.get('ReadingType') != 'Temperature':
                 continue
-            sensor_id = str(sensor.get('Id'))
             temperatures[sensor_id] = Reading(sensor.get('Name') or sensor_id, as_number(sensor.get('Reading')))
+        self._log_unidentified(SENSORS, {'sensors': skipped}, sensors)
 
         if self._thermal_source == 'subsystem' or len(fans) + len(temperatures) > len(data.fans) + len(
                 data.temperatures):
