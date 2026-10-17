@@ -167,6 +167,8 @@ async def test_idrac9_log_service_and_psu_metrics(hass: HomeAssistant, aioclient
     resources[f'{CHASSIS}/PowerSubsystem/PowerSupplies/PSU.Slot.1/Metrics'] = {'InputPowerWatts': {'Reading': 236}}
     resources[f'{MANAGER}/LogServices'] = {'Members': [
         {'@odata.id': '/redfish/v1/Managers/iDRAC.Embedded.1/LogServices/Sel'}]}
+    resources[f'{MANAGER}/LogServices/Sel'] = {
+        'Id': 'Sel', 'Entries': {'@odata.id': '/redfish/v1/Managers/iDRAC.Embedded.1/LogServices/Sel/Entries'}}
     resources[f'{MANAGER}/LogServices/Sel/Entries'] = {'Members': OLD_ENTRIES}
     aioclient_mock.clear_requests()
     for url in (f'{CHASSIS}/Power', f'{CHASSIS}/Thermal', f'{CHASSIS}/ThermalSubsystem/Fans', f'{CHASSIS}/Sensors'):
@@ -182,3 +184,50 @@ async def test_idrac9_log_service_and_psu_metrics(hass: HomeAssistant, aioclient
     assert entity_id(hass, 'event', 'alert') is not None
     fetched = {str(call[1]) for call in aioclient_mock.mock_calls}
     assert f'{MANAGER}/Logs/Sel' not in fetched
+
+
+# What a PowerEdge R620 (iDRAC 7, firmware 2.65.65.65) answers
+R620_SUPPLIES = [
+    {'MemberId': f'PSU.Slot.{slot}', 'Name': f'PS{slot} Status', 'PowerInputWatts': 900, 'LastPowerOutputWatts': None,
+     'LineInputVoltage': 232, 'InputRanges': [{'InputType': 'AC', 'OutputWattage': 750}],
+     'Status': {'Health': 'OK', 'State': 'Enabled'}}
+    for slot in (1, 2)
+]
+
+
+async def test_idrac7_rated_psu_input_sel_link_and_refused_energy_login(
+        hass: HomeAssistant, aioclient_mock: AiohttpClientMocker):
+    resources = dict(IDRAC8)
+    resources[f'{BASE}/Managers/iDRAC.Embedded.1'] = {'FirmwareVersion': '2.65.65.65'}
+    resources[f'{CHASSIS}/Power'] = {
+        'PowerControl': [{'PowerConsumedWatts': 164, 'PowerCapacityWatts': 896}], 'PowerSupplies': R620_SUPPLIES}
+    # The Sel service links to /Logs/Sel; LogServices/Sel/Entries answers with the service itself
+    resources[f'{MANAGER}/LogServices'] = {'Members': [
+        {'@odata.id': '/redfish/v1/Managers/iDRAC.Embedded.1/LogServices/Sel'},
+        {'@odata.id': '/redfish/v1/Managers/iDRAC.Embedded.1/LogServices/Lclog'}]}
+    resources[f'{MANAGER}/LogServices/Sel'] = {
+        'Id': 'Sel', 'Entries': {'@odata.id': '/redfish/v1/Managers/iDRAC.Embedded.1/Logs/Sel'}}
+    resources[f'{MANAGER}/LogServices/Sel/Entries'] = resources[f'{MANAGER}/LogServices/Sel']
+    resources[f'{MANAGER}/Logs/Sel'] = {'Members': OLD_ENTRIES}
+    aioclient_mock.clear_requests()
+    for url, body in resources.items():
+        aioclient_mock.get(url, json=body)
+    aioclient_mock.get('https://10.0.0.2/start.html', text='')
+    # The web GUI login refuses these credentials (authResult 1)
+    aioclient_mock.post('https://10.0.0.2/data/login', text='<root><authResult>1</authResult></root>')
+    entry = await setup_entry(hass)
+
+    # Rated values, not readings: no per-PSU sensors
+    assert entity_id(hass, 'sensor', 'psu_power_PSU.Slot.1') is None
+    health = hass.states.get(entity_id(hass, 'binary_sensor', 'health'))
+    assert health.attributes['latest_problem'] == 'The system board battery is low.'
+
+    def logins() -> int:
+        return sum(1 for call in aioclient_mock.mock_calls if str(call[1]).endswith(('/data/login', '/bmc/session')))
+
+    # One refused /data login, no sysmgmt (iDRAC 9 only) ...
+    assert logins() == 1
+    # ... and no new attempt on the next polls
+    await entry.runtime_data.async_refresh()
+    await entry.runtime_data.async_refresh()
+    assert logins() == 1

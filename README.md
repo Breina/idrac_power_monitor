@@ -80,7 +80,8 @@ python scripts/idrac_probe.py 192.168.1.120 root calvin --raw
 
 ### Unreleased
 - **Alerts**: an Alert event entity fires for each new System Event Log entry (Redfish), and the hardware health sensor shows the latest warning or critical entry. Entries logged while Home Assistant was down are reported once it is back; a cleared log is handled.
-- **Input power per PSU** where the iDRAC reports it (`PowerInputWatts` on `/Power`, `InputPowerWatts` through the PSU metrics on newer iDRAC 9 firmware)
+- **Input power per PSU** where the iDRAC reports it (`PowerInputWatts` on `/Power`, `InputPowerWatts` through the PSU metrics on newer iDRAC 9 firmware). iDRAC 7/8 firmware puts the PSU's rated input there (900 W for a 750 W supply): such values are recognised and no sensor is created.
+- **Fewer failed logins**: the iDRAC 9 `sysmgmt` energy API is no longer tried on iDRAC 7/8, and an energy source whose login is refused is retried after 6 hours instead of on every poll (each attempt slowed the poll down and added a failed login to the iDRAC's log)
 
 ### 2.0.0
 - iDRAC 6 support through the iDRAC web GUI API, without any new dependency (upstream #32, supersedes upstream PR #44 which needed IPMI)

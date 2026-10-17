@@ -52,6 +52,10 @@ LOGGED_RESPONSE_CHARS = 30000
 SYSMGMT_SESSION = '/sysmgmt/2015/bmc/session'
 SYSMGMT_POWER = '/sysmgmt/2015/server/sensor/power'
 
+# Retry delays for an energy counter source that failed (seconds)
+ENERGY_RETRY_AFTER_REFUSED = 6 * 3600
+ENERGY_RETRY_AFTER_ERROR = 3600
+
 ENERGY_REDFISH = 'redfish'
 ENERGY_DATA = 'data'
 ENERGY_SYSMGMT = 'sysmgmt'
@@ -65,6 +69,26 @@ def health_ok(status: dict | None) -> bool | None:
     if health is None:
         return None
     return health == 'OK'
+
+
+def is_idrac9_firmware(firmware: str | None) -> bool:
+    """iDRAC 9 firmware is 3.x and later; iDRAC 7/8 run 1.x / 2.x. Unknown: assume it might be."""
+    if not firmware:
+        return True
+    major = firmware.split('.', 1)[0]
+    return not major.isdigit() or int(major) >= 3
+
+
+def plausible_psu_inputs(inputs: dict[str, float], total_watts: float | None) -> bool:
+    """Whether per-PSU input readings are live values.
+
+    iDRAC 7/8 firmware fills PowerInputWatts with the PSU's rated input
+    (900 W for a 750 W supply) whatever the load: such values add up to far
+    more than the whole server draws.
+    """
+    if not inputs or total_watts is None:
+        return bool(inputs)
+    return sum(inputs.values()) <= total_watts * 1.5 + 50
 
 
 def parse_log_entry(entry: dict) -> Alert | None:
@@ -114,6 +138,11 @@ class IdracRedfish(IdracClient):
         self._thermal_source: str | None = None
         # Sources that answered 404 once are never asked again
         self._energy_unsupported: set[str] = set()
+        # Source -> monotonic time before which it is not tried again: a
+        # refused login is retried every poll otherwise, which slows each poll
+        # down and fills the iDRAC's log with failed logins.
+        self._energy_retry_at: dict[str, float] = {}
+        self._firmware: str | None = None
         self._energy_source: str | None = None
         self._data_api: IdracLegacy | None = None
         # System Event Log path once found; '' when this iDRAC has none
@@ -169,6 +198,7 @@ class IdracRedfish(IdracClient):
             firmware = manager.get('FirmwareVersion') if manager else None
         except CannotConnect as err:
             _LOGGER.debug('Could not read the firmware version of %s: %s', self.host, err)
+        self._firmware = firmware
         return IdracInfo(
             name=chassis.get('Name') or '',
             manufacturer=chassis.get('Manufacturer') or 'Dell Inc.',
@@ -228,6 +258,10 @@ class IdracRedfish(IdracClient):
             data.power_supplies[psu_id] = (supply.get('Name') or psu_id, health_ok(status))
             if (watts := await self._psu_input_watts(supply)) is not None:
                 data.psu_input_watts[psu_id] = watts
+        if not plausible_psu_inputs(data.psu_input_watts, data.power_watts):
+            _LOGGER.debug('Per-PSU input power on %s (%s) exceeds the server total (%s W): not live readings',
+                          self.host, data.psu_input_watts, data.power_watts)
+            data.psu_input_watts = {}
         self._log_unidentified(POWER if power is not None else POWER_SUPPLIES, {'power supplies': skipped},
                                 power if power is not None else supplies)
 
@@ -276,12 +310,20 @@ class IdracRedfish(IdracClient):
         self._alerts_read_at = time.monotonic()
 
     async def _find_sel(self) -> str:
+        """Path of the SEL entry collection.
+
+        The Sel log service links to its entries: LogServices/Sel/Entries on
+        iDRAC 9, Logs/Sel on iDRAC 7/8 (where LogServices/Sel/Entries answers
+        with the log service itself).
+        """
         services = await self.get_json(LOG_SERVICES)
         self._dump_once('Log services', services)
         if services is not None:
-            ids = {member.get('@odata.id', '').rstrip('/').rsplit('/', 1)[-1] for member in services.get('Members', [])}
-            if 'Sel' in ids:
-                return SEL_ENTRIES
+            paths = {member.get('@odata.id', '').rstrip('/').rsplit('/', 1)[-1]: member.get('@odata.id')
+                     for member in services.get('Members', [])}
+            if 'Sel' in paths:
+                service = await self.get_json(paths['Sel']) or {}
+                return (service.get('Entries') or {}).get('@odata.id') or SEL_ENTRIES
         if await self.get_json(SEL_LEGACY) is not None:
             return SEL_LEGACY
         return ''
@@ -373,14 +415,21 @@ class IdracRedfish(IdracClient):
         if self._energy_source == ENERGY_REDFISH:
             return
         sources = [self._energy_source] if self._energy_source else [ENERGY_DATA, ENERGY_SYSMGMT]
+        if not is_idrac9_firmware(self._firmware):
+            # The sysmgmt API only exists on iDRAC 9
+            sources = [source for source in sources if source != ENERGY_SYSMGMT]
+        now = time.monotonic()
         for source in sources:
-            if source in self._energy_unsupported:
+            if source in self._energy_unsupported or now < self._energy_retry_at.get(source, 0):
                 continue
             reader = self._energy_via_data if source == ENERGY_DATA else self._energy_via_sysmgmt
             try:
                 energy = await reader()
             except (CannotConnect, InvalidAuth, SessionLimit) as err:
-                _LOGGER.debug('Energy via %s on %s failed: %s', source, self.host, err)
+                delay = ENERGY_RETRY_AFTER_REFUSED if isinstance(err, InvalidAuth) else ENERGY_RETRY_AFTER_ERROR
+                self._energy_retry_at[source] = now + delay
+                _LOGGER.debug('Energy via %s on %s failed (%s), next try in %d min',
+                              source, self.host, repr(err), delay // 60)
                 continue
             if energy is not None:
                 self._energy_source = source
