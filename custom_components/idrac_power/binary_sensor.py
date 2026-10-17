@@ -6,6 +6,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import IdracConfigEntry
+from .client import active_problems
 from .coordinator import IdracCoordinator
 from .entity import IdracEntity, add_entities_as_they_appear
 
@@ -47,6 +48,20 @@ class IdracHealthBinarySensor(IdracEntity, BinarySensorEntity):
     def is_on(self):
         healthy = self.coordinator.data.health_ok
         return None if healthy is None else not healthy
+
+    @property
+    def extra_state_attributes(self):
+        """Log entries for problems not cleared since, which usually explain a problem state."""
+        alerts = self.coordinator.data.alerts
+        if alerts is None:
+            return None
+        problems = active_problems(alerts)
+        attributes = {'active_problems': [f'{alert.severity}: {alert.message}' for alert in problems]}
+        if problems:
+            latest = problems[-1]
+            attributes.update(latest_problem=latest.message, latest_problem_severity=latest.severity,
+                              latest_problem_logged_at=latest.created)
+        return attributes
 
 
 class IdracPsuBinarySensor(IdracEntity, BinarySensorEntity):

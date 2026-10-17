@@ -9,6 +9,7 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.storage import Store
 
 from .client import CannotConnect, InvalidAuth, RedfishConfig, SessionLimit
 from .const import CONF_API, HOST, PASSWORD, USERNAME
@@ -17,7 +18,7 @@ from .factory import async_create_client
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.BUTTON, Platform.SWITCH]
+PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.BUTTON, Platform.SWITCH, Platform.EVENT]
 
 # Unique id suffixes 1.8.0 made up for list items without identifiers
 PHANTOM_SUFFIX = re.compile(r'psu_\d+|fan_None|temp_None')
@@ -86,3 +87,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: IdracConfigEntry) -> bo
         await client.close()
         client.session.detach()
     return unload_ok
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: IdracConfigEntry) -> None:
+    """Forget which event log entries were already reported."""
+    from .coordinator import ALERT_STORE_VERSION
+    from .const import DOMAIN
+    await Store(hass, ALERT_STORE_VERSION, f'{DOMAIN}.{entry.entry_id}.alerts').async_remove()

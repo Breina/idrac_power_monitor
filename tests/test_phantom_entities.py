@@ -15,6 +15,7 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClien
 
 from custom_components.idrac_power.const import DOMAIN
 
+from .conftest import no_event_log
 from .test_redfish import BASE, CHASSIS, setup
 
 PREFIX = 'CN123_PowerEdge R730xd_'
@@ -54,6 +55,7 @@ def serve(aioclient_mock: AiohttpClientMocker, degraded: bool = False) -> None:
     aioclient_mock.get('https://10.0.0.2/start.html', status=404)
     aioclient_mock.post('https://10.0.0.2/data/login', status=404)
     aioclient_mock.post('https://10.0.0.2/sysmgmt/2015/bmc/session', status=404)
+    no_event_log(aioclient_mock)
 
 
 def unique_ids(hass: HomeAssistant, entry: MockConfigEntry) -> set[str]:

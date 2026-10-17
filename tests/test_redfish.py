@@ -7,6 +7,8 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClien
 
 from custom_components.idrac_power.const import DOMAIN
 
+from .conftest import no_event_log
+
 BASE = 'https://10.0.0.2/redfish/v1'
 CHASSIS = f'{BASE}/Chassis/System.Embedded.1'
 
@@ -34,6 +36,7 @@ IDRAC8 = {
 def serve(aioclient_mock: AiohttpClientMocker, resources: dict) -> None:
     for url, body in resources.items():
         aioclient_mock.get(url, json=body)
+    no_event_log(aioclient_mock)
 
 
 async def setup(hass: HomeAssistant, data: dict | None = None, entry: MockConfigEntry | None = None) -> MockConfigEntry:
@@ -103,6 +106,7 @@ async def test_idrac9_subsystem_fallback_follows_absolute_odata_ids(
         aioclient_mock.get(url, status=404, text='')
     for url, body in resources.items():
         aioclient_mock.get(url, json=body)
+    no_event_log(aioclient_mock)
     entry = await setup(hass)
     assert entry.state is ConfigEntryState.LOADED
 

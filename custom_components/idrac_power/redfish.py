@@ -4,11 +4,13 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import time
 
 import aiohttp
 
 from .client import (
     REQUEST_TIMEOUT,
+    Alert,
     CannotConnect,
     IdracClient,
     IdracData,
@@ -36,12 +38,25 @@ POWER_SUPPLIES = CHASSIS + '/PowerSubsystem/PowerSupplies'
 FANS = CHASSIS + '/ThermalSubsystem/Fans'
 SENSORS = CHASSIS + '/Sensors'
 EXPAND = '?$expand=*($levels=1)'
+# System Event Log: iDRAC 9 (and 7/8 on recent firmware) under LogServices,
+# older iDRAC 7/8 firmware under Logs
+LOG_SERVICES = MANAGER + '/LogServices'
+SEL_ENTRIES = LOG_SERVICES + '/Sel/Entries'
+SEL_LEGACY = MANAGER + '/Logs/Sel'
+# The log is a large resource on a slow controller: no need to read it more often
+ALERTS_MIN_INTERVAL = 60
+# A log listed oldest first is paged through to its newest entries, up to this many pages
+MAX_LOG_PAGES = 20
 # Enough for a whole /Power or /Thermal answer of a 2U server
 LOGGED_RESPONSE_CHARS = 30000
 
 # iDRAC 9 proprietary web API, used only for the cumulative energy counter
 SYSMGMT_SESSION = '/sysmgmt/2015/bmc/session'
 SYSMGMT_POWER = '/sysmgmt/2015/server/sensor/power'
+
+# Retry delays for an energy counter source that failed (seconds)
+ENERGY_RETRY_AFTER_REFUSED = 6 * 3600
+ENERGY_RETRY_AFTER_ERROR = 3600
 
 ENERGY_REDFISH = 'redfish'
 ENERGY_DATA = 'data'
@@ -56,6 +71,67 @@ def health_ok(status: dict | None) -> bool | None:
     if health is None:
         return None
     return health == 'OK'
+
+
+def is_idrac9_firmware(firmware: str | None) -> bool:
+    """iDRAC 9 firmware is 3.x and later; iDRAC 7/8 run 1.x / 2.x. Unknown: assume it might be."""
+    if not firmware:
+        return True
+    major = firmware.split('.', 1)[0]
+    return not major.isdigit() or int(major) >= 3
+
+
+def plausible_psu_inputs(inputs: dict[str, float], total_watts: float | None) -> bool:
+    """Whether per-PSU input readings are live values.
+
+    iDRAC 7/8 firmware fills PowerInputWatts with the PSU's rated input
+    (900 W for a 750 W supply) whatever the load: such values add up to far
+    more than the whole server draws.
+    """
+    if not inputs or total_watts is None:
+        return bool(inputs)
+    return sum(inputs.values()) <= total_watts * 1.5 + 50
+
+
+def parse_log_entry(entry: dict) -> Alert | None:
+    """A Redfish LogEntry as an Alert; None for references or entries without a message."""
+    message = (entry.get('Message') or '').strip()
+    entry_id = entry.get('Id')
+    if not message or entry_id in (None, ''):
+        return None
+    severity = entry.get('Severity') or 'OK'
+    if severity not in ('OK', 'Warning', 'Critical'):
+        severity = 'OK'
+    sensor = entry.get('SensorNumber')
+    if sensor is None:
+        sensor = _member(entry.get('SensorType'))
+    return Alert(
+        id=str(entry_id),
+        created=entry.get('Created') or '',
+        severity=severity,
+        message=message,
+        message_id=entry.get('MessageId') or None,
+        sensor=None if sensor in (None, '') else str(sensor),
+        assertion=_member(entry.get('EntryCode')),
+    )
+
+
+def _member(value) -> str | None:
+    """Dell wraps enum values as [{"Member": "Assert"}]; Redfish uses plain strings."""
+    if isinstance(value, list):
+        value = value[0] if value else None
+    if isinstance(value, dict):
+        value = value.get('Member')
+    return value if isinstance(value, str) and value else None
+
+
+def _created(entry: dict) -> str:
+    return entry.get('Created') or ''
+
+
+def _numeric_id(value: str):
+    """Sort "2" before "10"; non-numeric ids after numeric ones."""
+    return (0, int(value), '') if value.isdigit() else (1, 0, value)
 
 
 def stable_id(item: dict, *keys: str) -> str | None:
@@ -82,8 +158,19 @@ class IdracRedfish(IdracClient):
         self._thermal_source: str | None = None
         # Sources that answered 404 once are never asked again
         self._energy_unsupported: set[str] = set()
+        # Source -> monotonic time before which it is not tried again: a
+        # refused login is retried every poll otherwise, which slows each poll
+        # down and fills the iDRAC's log with failed logins.
+        self._energy_retry_at: dict[str, float] = {}
+        self._firmware: str | None = None
         self._energy_source: str | None = None
         self._data_api: IdracLegacy | None = None
+        # System Event Log path once found; '' when this iDRAC has none
+        self._sel_path: str | None = None
+        self._alerts: list[Alert] | None = None
+        self._alerts_read_at = 0.0
+        # Raw answers dumped once at debug level, for issue reports
+        self._dumped: set[str] = set()
 
     async def _request(self, method: str, path: str, **kwargs) -> aiohttp.ClientResponse:
         try:
@@ -131,6 +218,7 @@ class IdracRedfish(IdracClient):
             firmware = manager.get('FirmwareVersion') if manager else None
         except CannotConnect as err:
             _LOGGER.debug('Could not read the firmware version of %s: %s', self.host, err)
+        self._firmware = firmware
         return IdracInfo(
             name=chassis.get('Name') or '',
             manufacturer=chassis.get('Manufacturer') or 'Dell Inc.',
@@ -145,11 +233,12 @@ class IdracRedfish(IdracClient):
         # The system resource tells whether the iDRAC is reachable at all:
         # its failure makes the whole poll fail.
         system = await self.get_json(SYSTEM) or {}
+        self._dump_once('System status', {key: system.get(key) for key in ('Status', 'PowerState', 'Oem')})
         power_state = system.get('PowerState')
         data.power_on = None if power_state is None else power_state == 'On'
         data.health_ok = health_ok(system.get('Status'))
 
-        for step in (self._fetch_power, self._fetch_thermals, self._fetch_energy):
+        for step in (self._fetch_power, self._fetch_thermals, self._fetch_energy, self._fetch_alerts):
             try:
                 await step(data)
             except InvalidAuth:
@@ -174,6 +263,9 @@ class IdracRedfish(IdracClient):
                 data.energy_kwh = energy
             supplies = await self._members(POWER_SUPPLIES)
 
+        self._dump_once('Power supplies', supplies)
+        if power is not None:
+            self._dump_once('Power control', power.get('PowerControl'))
         skipped = 0
         for supply in supplies:
             status = supply.get('Status') or {}
@@ -184,8 +276,98 @@ class IdracRedfish(IdracClient):
             if status.get('State') == 'Absent':
                 continue
             data.power_supplies[psu_id] = (supply.get('Name') or psu_id, health_ok(status))
+            if (watts := await self._psu_input_watts(supply)) is not None:
+                data.psu_input_watts[psu_id] = watts
+        if not plausible_psu_inputs(data.psu_input_watts, data.power_watts):
+            _LOGGER.debug('Per-PSU input power on %s (%s) exceeds the server total (%s W): not live readings',
+                          self.host, data.psu_input_watts, data.power_watts)
+            data.psu_input_watts = {}
         self._log_unidentified(POWER if power is not None else POWER_SUPPLIES, {'power supplies': skipped},
                                 power if power is not None else supplies)
+
+    def _dump_once(self, what: str, payload) -> None:
+        """Log a raw iDRAC answer once per setup at debug level (what each firmware actually sends)."""
+        if what in self._dumped or not _LOGGER.isEnabledFor(logging.DEBUG):
+            return
+        self._dumped.add(what)
+        _LOGGER.debug('%s on %s: %s', what, self.host, json.dumps(payload, default=str)[:LOGGED_RESPONSE_CHARS])
+
+    async def _psu_input_watts(self, supply: dict) -> float | None:
+        """Input power of one PSU: /Power lists it inline, PowerSubsystem behind a Metrics link."""
+        if (watts := as_number(supply.get('PowerInputWatts'))) is not None:
+            return watts
+        metrics_path = (supply.get('Metrics') or {}).get('@odata.id')
+        if not metrics_path:
+            return None
+        metrics = await self.get_json(metrics_path) or {}
+        return as_number((metrics.get('InputPowerWatts') or {}).get('Reading'))
+
+    async def _fetch_alerts(self, data: IdracData) -> None:
+        """System Event Log entries, oldest first. Read at most once a minute."""
+        if self._sel_path == '':
+            return
+        if self._alerts is not None and time.monotonic() - self._alerts_read_at < ALERTS_MIN_INTERVAL:
+            data.alerts = self._alerts
+            return
+        if self._sel_path is None:
+            self._sel_path = await self._find_sel()
+            if not self._sel_path:
+                _LOGGER.debug('No readable System Event Log on %s', self.host)
+                return
+        log = await self.get_json(self._sel_path)
+        if log is None:
+            return
+        members = log.get('Members') or []
+        self._dump_once('System Event Log', {'path': self._sel_path, 'count': len(members),
+                                             'keys': sorted(log), 'first': members[:2], 'last': members[-3:]})
+        members = await self._newest_log_page(log, members)
+        alerts = []
+        for entry in members:
+            alert = parse_log_entry(entry)
+            if alert is not None:
+                alerts.append(alert)
+        alerts.sort(key=lambda alert: (alert.created, _numeric_id(alert.id)))
+        self._alerts = data.alerts = alerts
+        self._alerts_read_at = time.monotonic()
+
+    async def _newest_log_page(self, log: dict, members: list[dict]) -> list[dict]:
+        """Entries of the page holding the newest ones.
+
+        iDRAC 7/8 list the log newest first, 50 per page: the first page is
+        the one that matters. A log listed oldest first is followed to its
+        last page.
+        """
+        next_link = log.get('Members@odata.nextLink')
+        if not next_link or len(members) < 2 or _created(members[0]) >= _created(members[-1]):
+            return members
+        for _ in range(MAX_LOG_PAGES):
+            page = await self.get_json(next_link)
+            if not page or not page.get('Members'):
+                break
+            members = page['Members']
+            next_link = page.get('Members@odata.nextLink')
+            if not next_link:
+                break
+        return members
+
+    async def _find_sel(self) -> str:
+        """Path of the SEL entry collection.
+
+        The Sel log service links to its entries: LogServices/Sel/Entries on
+        iDRAC 9, Logs/Sel on iDRAC 7/8 (where LogServices/Sel/Entries answers
+        with the log service itself).
+        """
+        services = await self.get_json(LOG_SERVICES)
+        self._dump_once('Log services', services)
+        if services is not None:
+            paths = {member.get('@odata.id', '').rstrip('/').rsplit('/', 1)[-1]: member.get('@odata.id')
+                     for member in services.get('Members', [])}
+            if 'Sel' in paths:
+                service = await self.get_json(paths['Sel']) or {}
+                return (service.get('Entries') or {}).get('@odata.id') or SEL_ENTRIES
+        if await self.get_json(SEL_LEGACY) is not None:
+            return SEL_LEGACY
+        return ''
 
     def _log_unidentified(self, path: str, skipped: dict[str, int], response) -> None:
         """Log an answer whose items had no identifier, to find out what the iDRAC sent."""
@@ -274,14 +456,21 @@ class IdracRedfish(IdracClient):
         if self._energy_source == ENERGY_REDFISH:
             return
         sources = [self._energy_source] if self._energy_source else [ENERGY_DATA, ENERGY_SYSMGMT]
+        if not is_idrac9_firmware(self._firmware):
+            # The sysmgmt API only exists on iDRAC 9
+            sources = [source for source in sources if source != ENERGY_SYSMGMT]
+        now = time.monotonic()
         for source in sources:
-            if source in self._energy_unsupported:
+            if source in self._energy_unsupported or now < self._energy_retry_at.get(source, 0):
                 continue
             reader = self._energy_via_data if source == ENERGY_DATA else self._energy_via_sysmgmt
             try:
                 energy = await reader()
             except (CannotConnect, InvalidAuth, SessionLimit) as err:
-                _LOGGER.debug('Energy via %s on %s failed: %s', source, self.host, err)
+                delay = ENERGY_RETRY_AFTER_REFUSED if isinstance(err, InvalidAuth) else ENERGY_RETRY_AFTER_ERROR
+                self._energy_retry_at[source] = now + delay
+                _LOGGER.debug('Energy via %s on %s failed (%s), next try in %d min',
+                              source, self.host, repr(err), delay // 60)
                 continue
             if energy is not None:
                 self._energy_source = source
