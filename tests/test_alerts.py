@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import pytest
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
@@ -291,3 +291,25 @@ async def test_oldest_first_log_is_read_from_its_last_page(hass: HomeAssistant, 
 
     health = hass.states.get(entity_id(hass, 'binary_sensor', 'health'))
     assert health.attributes['latest_problem'] == 'Power supply 2 is not receiving input power.'
+
+
+async def test_a_flood_of_new_entries_reports_only_the_newest(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker,
+                                                               hass_storage):
+    # Stored baseline from a read that found the log empty
+    hass_storage[f'{DOMAIN}.idrac1.alerts'] = {'version': 1, 'minor_version': 1,
+                                               'key': f'{DOMAIN}.idrac1.alerts', 'data': {'seen': []}}
+    entries = [sel_entry(str(n), f'2026-10-{n:02d}T10:00:00-05:00', 'Warning', f'Entry {n}') for n in range(1, 26)]
+    serve(aioclient_mock, idrac8(), entries)
+    events = []
+
+    @callback
+    def collect(event) -> None:
+        if event.data['entity_id'].startswith('event.'):
+            events.append(event)
+
+    hass.bus.async_listen('state_changed', collect)
+    await setup_entry(hass)
+
+    fired = [event.data['new_state'].attributes['message'] for event in events
+             if event.data['new_state'] and event.data['new_state'].attributes.get('message')]
+    assert fired == [f'Entry {n}' for n in range(16, 26)]

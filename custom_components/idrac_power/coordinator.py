@@ -25,6 +25,9 @@ from .const import CONF_INTERVAL, CONF_INTERVAL_DEFAULT, DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 ALERT_STORE_VERSION = 1
+# More new entries than this in one poll is not news but a re-read log (e.g.
+# after the log could not be read for a while): only the newest are reported.
+MAX_NEW_ALERTS = 10
 
 
 class IdracCoordinator(DataUpdateCoordinator[IdracData]):
@@ -69,7 +72,12 @@ class IdracCoordinator(DataUpdateCoordinator[IdracData]):
             self._seen_alerts = set(stored.get('seen', []))
 
         current = {alert.key for alert in alerts}
-        self.new_alerts = [alert for alert in alerts if alert.key not in self._seen_alerts]
+        new_alerts = [alert for alert in alerts if alert.key not in self._seen_alerts]
+        if len(new_alerts) > MAX_NEW_ALERTS:
+            _LOGGER.info('%d new event log entries on %s at once: reporting the newest %d',
+                         len(new_alerts), self.client.host, MAX_NEW_ALERTS)
+            new_alerts = new_alerts[-MAX_NEW_ALERTS:]
+        self.new_alerts = new_alerts
         if current != self._seen_alerts:
             # Only what the log still holds: cleared entries drop out
             self._seen_alerts = current

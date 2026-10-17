@@ -34,8 +34,16 @@ class IdracAlertEvent(IdracEntity, EventEntity):
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
-        # Entries found by the poll that ran before this entity existed
-        self._fire(self.coordinator.new_alerts)
+        # Entries found by the poll that ran before this entity existed. Fired
+        # once the entity is fully added: states written while it is being
+        # added collapse into its first state, losing all but the last entry.
+        if pending := list(self.coordinator.new_alerts):
+            self.hass.loop.call_soon(self._fire_if_added, pending)
+
+    @callback
+    def _fire_if_added(self, alerts: list[Alert]) -> None:
+        if self.hass is not None and self.entity_id:
+            self._fire(alerts)
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -53,5 +61,5 @@ class IdracAlertEvent(IdracEntity, EventEntity):
                 'sensor': alert.sensor,
                 'assertion': alert.assertion,
             })
-        if alerts:
+            # One state change per entry, or automations only see the last one
             self.async_write_ha_state()
