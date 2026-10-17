@@ -55,6 +55,21 @@ class Reading:
     value: float | None
 
 
+@dataclass(frozen=True)
+class Alert:
+    """One entry of the iDRAC's System Event Log."""
+    id: str
+    created: str
+    severity: str  # Redfish severity: OK, Warning or Critical
+    message: str
+    message_id: str | None = None
+
+    @property
+    def key(self) -> str:
+        """Identifies an entry across polls; ids restart when the log is cleared, timestamps do not."""
+        return f'{self.id}|{self.created}'
+
+
 @dataclass
 class IdracData:
     """One poll's worth of data. None means "not available on this iDRAC"."""
@@ -66,6 +81,10 @@ class IdracData:
     temperatures: dict[str, Reading] = field(default_factory=dict)
     # PSU id -> (name, healthy)
     power_supplies: dict[str, tuple[str, bool | None]] = field(default_factory=dict)
+    # PSU id -> input power (W), only for PSUs whose iDRAC reports it
+    psu_input_watts: dict[str, float] = field(default_factory=dict)
+    # System Event Log, oldest first; None when this iDRAC's log can't be read
+    alerts: list[Alert] | None = None
 
 
 def as_number(value) -> float | int | None:

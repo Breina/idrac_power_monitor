@@ -48,6 +48,19 @@ class IdracHealthBinarySensor(IdracEntity, BinarySensorEntity):
         healthy = self.coordinator.data.health_ok
         return None if healthy is None else not healthy
 
+    @property
+    def extra_state_attributes(self):
+        """The latest warning or critical log entry, which usually explains a problem state."""
+        alerts = self.coordinator.data.alerts
+        if not alerts:
+            return None
+        problems = [alert for alert in alerts if alert.severity != 'OK']
+        if not problems:
+            return None
+        latest = problems[-1]
+        return {'latest_problem': latest.message, 'latest_problem_severity': latest.severity,
+                'latest_problem_logged_at': latest.created}
+
 
 class IdracPsuBinarySensor(IdracEntity, BinarySensorEntity):
     _attr_device_class = BinarySensorDeviceClass.PROBLEM

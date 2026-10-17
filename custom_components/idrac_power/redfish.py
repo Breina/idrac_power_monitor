@@ -4,11 +4,13 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import time
 
 import aiohttp
 
 from .client import (
     REQUEST_TIMEOUT,
+    Alert,
     CannotConnect,
     IdracClient,
     IdracData,
@@ -36,6 +38,13 @@ POWER_SUPPLIES = CHASSIS + '/PowerSubsystem/PowerSupplies'
 FANS = CHASSIS + '/ThermalSubsystem/Fans'
 SENSORS = CHASSIS + '/Sensors'
 EXPAND = '?$expand=*($levels=1)'
+# System Event Log: iDRAC 9 (and 7/8 on recent firmware) under LogServices,
+# older iDRAC 7/8 firmware under Logs
+LOG_SERVICES = MANAGER + '/LogServices'
+SEL_ENTRIES = LOG_SERVICES + '/Sel/Entries'
+SEL_LEGACY = MANAGER + '/Logs/Sel'
+# The log is a large resource on a slow controller: no need to read it more often
+ALERTS_MIN_INTERVAL = 60
 # Enough for a whole /Power or /Thermal answer of a 2U server
 LOGGED_RESPONSE_CHARS = 30000
 
@@ -56,6 +65,29 @@ def health_ok(status: dict | None) -> bool | None:
     if health is None:
         return None
     return health == 'OK'
+
+
+def parse_log_entry(entry: dict) -> Alert | None:
+    """A Redfish LogEntry as an Alert; None for references or entries without a message."""
+    message = (entry.get('Message') or '').strip()
+    entry_id = entry.get('Id')
+    if not message or entry_id in (None, ''):
+        return None
+    severity = entry.get('Severity') or 'OK'
+    if severity not in ('OK', 'Warning', 'Critical'):
+        severity = 'OK'
+    return Alert(
+        id=str(entry_id),
+        created=entry.get('Created') or '',
+        severity=severity,
+        message=message,
+        message_id=entry.get('MessageId') or entry.get('EntryCode') or None,
+    )
+
+
+def _numeric_id(value: str):
+    """Sort "2" before "10"; non-numeric ids after numeric ones."""
+    return (0, int(value), '') if value.isdigit() else (1, 0, value)
 
 
 def stable_id(item: dict, *keys: str) -> str | None:
@@ -84,6 +116,10 @@ class IdracRedfish(IdracClient):
         self._energy_unsupported: set[str] = set()
         self._energy_source: str | None = None
         self._data_api: IdracLegacy | None = None
+        # System Event Log path once found; '' when this iDRAC has none
+        self._sel_path: str | None = None
+        self._alerts: list[Alert] | None = None
+        self._alerts_read_at = 0.0
 
     async def _request(self, method: str, path: str, **kwargs) -> aiohttp.ClientResponse:
         try:
@@ -149,7 +185,7 @@ class IdracRedfish(IdracClient):
         data.power_on = None if power_state is None else power_state == 'On'
         data.health_ok = health_ok(system.get('Status'))
 
-        for step in (self._fetch_power, self._fetch_thermals, self._fetch_energy):
+        for step in (self._fetch_power, self._fetch_thermals, self._fetch_energy, self._fetch_alerts):
             try:
                 await step(data)
             except InvalidAuth:
@@ -184,8 +220,54 @@ class IdracRedfish(IdracClient):
             if status.get('State') == 'Absent':
                 continue
             data.power_supplies[psu_id] = (supply.get('Name') or psu_id, health_ok(status))
+            if (watts := await self._psu_input_watts(supply)) is not None:
+                data.psu_input_watts[psu_id] = watts
         self._log_unidentified(POWER if power is not None else POWER_SUPPLIES, {'power supplies': skipped},
                                 power if power is not None else supplies)
+
+    async def _psu_input_watts(self, supply: dict) -> float | None:
+        """Input power of one PSU: /Power lists it inline, PowerSubsystem behind a Metrics link."""
+        if (watts := as_number(supply.get('PowerInputWatts'))) is not None:
+            return watts
+        metrics_path = (supply.get('Metrics') or {}).get('@odata.id')
+        if not metrics_path:
+            return None
+        metrics = await self.get_json(metrics_path) or {}
+        return as_number((metrics.get('InputPowerWatts') or {}).get('Reading'))
+
+    async def _fetch_alerts(self, data: IdracData) -> None:
+        """System Event Log entries, oldest first. Read at most once a minute."""
+        if self._sel_path == '':
+            return
+        if self._alerts is not None and time.monotonic() - self._alerts_read_at < ALERTS_MIN_INTERVAL:
+            data.alerts = self._alerts
+            return
+        if self._sel_path is None:
+            self._sel_path = await self._find_sel()
+            if not self._sel_path:
+                _LOGGER.debug('No readable System Event Log on %s', self.host)
+                return
+        log = await self.get_json(self._sel_path)
+        if log is None:
+            return
+        alerts = []
+        for entry in log.get('Members') or []:
+            alert = parse_log_entry(entry)
+            if alert is not None:
+                alerts.append(alert)
+        alerts.sort(key=lambda alert: (alert.created, _numeric_id(alert.id)))
+        self._alerts = data.alerts = alerts
+        self._alerts_read_at = time.monotonic()
+
+    async def _find_sel(self) -> str:
+        services = await self.get_json(LOG_SERVICES)
+        if services is not None:
+            ids = {member.get('@odata.id', '').rstrip('/').rsplit('/', 1)[-1] for member in services.get('Members', [])}
+            if 'Sel' in ids:
+                return SEL_ENTRIES
+        if await self.get_json(SEL_LEGACY) is not None:
+            return SEL_LEGACY
+        return ''
 
     def _log_unidentified(self, path: str, skipped: dict[str, int], response) -> None:
         """Log an answer whose items had no identifier, to find out what the iDRAC sent."""

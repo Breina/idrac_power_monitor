@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from .client import (
     POWER_FORCE_RESTART,
+    Alert,
     POWER_ON,
     IdracClient,
     IdracData,
@@ -33,6 +34,8 @@ class IdracMock(IdracClient):
             fans={'MemberID 1': Reading('First Mock Fan', 1), 'MemberID 2': Reading('Second Mock Fan', 2)},
             temperatures={'MemberID 3': Reading('Mock Temperature', 10)},
             power_supplies={'PSU1': ('PS1 Status', True), 'PSU2': ('PS2 Status', False)},
+            psu_input_watts={'PSU1': 100 if self.power_on else 5},
+            alerts=[Alert('1', '2026-01-01T10:00:00+00:00', 'Critical', 'Power supply 2 is not receiving input power.', 'PSU0003')],
         )
 
     async def set_power(self, action: str) -> None:
