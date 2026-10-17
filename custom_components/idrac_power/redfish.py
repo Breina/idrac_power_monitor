@@ -120,6 +120,8 @@ class IdracRedfish(IdracClient):
         self._sel_path: str | None = None
         self._alerts: list[Alert] | None = None
         self._alerts_read_at = 0.0
+        # Raw answers dumped once at debug level, for issue reports
+        self._dumped: set[str] = set()
 
     async def _request(self, method: str, path: str, **kwargs) -> aiohttp.ClientResponse:
         try:
@@ -181,6 +183,7 @@ class IdracRedfish(IdracClient):
         # The system resource tells whether the iDRAC is reachable at all:
         # its failure makes the whole poll fail.
         system = await self.get_json(SYSTEM) or {}
+        self._dump_once('System status', {key: system.get(key) for key in ('Status', 'PowerState', 'Oem')})
         power_state = system.get('PowerState')
         data.power_on = None if power_state is None else power_state == 'On'
         data.health_ok = health_ok(system.get('Status'))
@@ -210,6 +213,9 @@ class IdracRedfish(IdracClient):
                 data.energy_kwh = energy
             supplies = await self._members(POWER_SUPPLIES)
 
+        self._dump_once('Power supplies', supplies)
+        if power is not None:
+            self._dump_once('Power control', power.get('PowerControl'))
         skipped = 0
         for supply in supplies:
             status = supply.get('Status') or {}
@@ -224,6 +230,13 @@ class IdracRedfish(IdracClient):
                 data.psu_input_watts[psu_id] = watts
         self._log_unidentified(POWER if power is not None else POWER_SUPPLIES, {'power supplies': skipped},
                                 power if power is not None else supplies)
+
+    def _dump_once(self, what: str, payload) -> None:
+        """Log a raw iDRAC answer once per setup at debug level (what each firmware actually sends)."""
+        if what in self._dumped or not _LOGGER.isEnabledFor(logging.DEBUG):
+            return
+        self._dumped.add(what)
+        _LOGGER.debug('%s on %s: %s', what, self.host, json.dumps(payload, default=str)[:LOGGED_RESPONSE_CHARS])
 
     async def _psu_input_watts(self, supply: dict) -> float | None:
         """Input power of one PSU: /Power lists it inline, PowerSubsystem behind a Metrics link."""
@@ -250,6 +263,9 @@ class IdracRedfish(IdracClient):
         log = await self.get_json(self._sel_path)
         if log is None:
             return
+        members = log.get('Members') or []
+        self._dump_once('System Event Log', {'path': self._sel_path, 'count': len(members),
+                                             'keys': sorted(log), 'first': members[:2], 'last': members[-3:]})
         alerts = []
         for entry in log.get('Members') or []:
             alert = parse_log_entry(entry)
@@ -261,6 +277,7 @@ class IdracRedfish(IdracClient):
 
     async def _find_sel(self) -> str:
         services = await self.get_json(LOG_SERVICES)
+        self._dump_once('Log services', services)
         if services is not None:
             ids = {member.get('@odata.id', '').rstrip('/').rsplit('/', 1)[-1] for member in services.get('Members', [])}
             if 'Sel' in ids:
