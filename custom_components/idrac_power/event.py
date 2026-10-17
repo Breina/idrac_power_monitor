@@ -50,6 +50,8 @@ class IdracAlertEvent(IdracEntity, EventEntity):
                 'logged_at': alert.created,
                 'log_id': alert.id,
                 'message_id': alert.message_id,
+                'sensor': alert.sensor,
+                'assertion': alert.assertion,
             })
         if alerts:
             self.async_write_ha_state()

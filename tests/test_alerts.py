@@ -231,3 +231,63 @@ async def test_idrac7_rated_psu_input_sel_link_and_refused_energy_login(
     await entry.runtime_data.async_refresh()
     await entry.runtime_data.async_refresh()
     assert logins() == 1
+
+
+def r620_entry(entry_id: int, created: str, severity: str, assertion: str, sensor: int, message: str) -> dict:
+    """Shape of an iDRAC 7 SEL entry (Dell wraps enums as [{"Member": ...}])."""
+    return {'@odata.id': f'/redfish/v1/Managers/iDRAC.Embedded.1/Logs/Sel/{entry_id}', 'Id': str(entry_id),
+            'Created': created, 'EntryCode': [{'Member': assertion}], 'EntryType': 'SEL', 'Message': message,
+            'MessageId': '3ffff', 'SensorNumber': sensor,
+            'SensorType': [{'Member': 'Power Supply / Converter'}], 'Severity': severity}
+
+
+# Newest first, as the R620 lists them: a feed swap, PSU 2 back after 8 s
+R620_LOG = [
+    r620_entry(328, '2026-10-16T10:42:21-05:00', 'OK', 'Deassert', 99, 'The input power for power supply 2 has been restored.'),
+    r620_entry(327, '2026-10-16T10:42:13-05:00', 'Critical', 'Assert', 99, 'The power input for power supply 2 is lost.'),
+    r620_entry(281, '2026-09-04T12:33:16-05:00', 'Critical', 'Assert', 98, 'The power input for power supply 1 is lost.'),
+    r620_entry(280, '2026-08-22T11:45:56-05:00', 'OK', 'Deassert', 98, 'The input power for power supply 1 has been restored.'),
+    r620_entry(279, '2026-08-22T11:45:44-05:00', 'Critical', 'Assert', 98, 'The power input for power supply 1 is lost.'),
+]
+
+
+async def test_cleared_problems_are_not_active(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker):
+    serve(aioclient_mock, idrac8(), R620_LOG)
+    entry = await setup_entry(hass)
+
+    health = hass.states.get(entity_id(hass, 'binary_sensor', 'health'))
+    # PSU 2's loss was restored; PSU 1's loss of 2026-09-04 was never cleared
+    assert health.attributes['active_problems'] == ['Critical: The power input for power supply 1 is lost.']
+    assert health.attributes['latest_problem_logged_at'] == '2026-09-04T12:33:16-05:00'
+
+    restored = r620_entry(329, '2026-10-17T08:00:00-05:00', 'OK', 'Deassert', 98,
+                          'The input power for power supply 1 has been restored.')
+    serve(aioclient_mock, idrac8(), [restored, *R620_LOG])
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+
+    health = hass.states.get(entity_id(hass, 'binary_sensor', 'health'))
+    assert health.attributes['active_problems'] == []
+    assert 'latest_problem' not in health.attributes
+    alert = hass.states.get(entity_id(hass, 'event', 'alert'))
+    assert alert.attributes['event_type'] == 'ok'
+    assert alert.attributes['assertion'] == 'Deassert'
+    assert alert.attributes['sensor'] == '98'
+
+
+async def test_oldest_first_log_is_read_from_its_last_page(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker):
+    first_page = {'Members': OLD_ENTRIES,
+                  'Members@odata.nextLink': '/redfish/v1/Managers/iDRAC.Embedded.1/Logs/Sel?$skip=2'}
+    aioclient_mock.clear_requests()
+    for url, body in idrac8().items():
+        aioclient_mock.get(url, json=body)
+    aioclient_mock.get('https://10.0.0.2/start.html', status=404)
+    aioclient_mock.post('https://10.0.0.2/data/login', status=404)
+    aioclient_mock.post('https://10.0.0.2/sysmgmt/2015/bmc/session', status=404)
+    aioclient_mock.get(f'{MANAGER}/LogServices', status=404, text='')
+    aioclient_mock.get(f'{MANAGER}/Logs/Sel?$skip=2', json={'Members': [NEW_ENTRY]})
+    aioclient_mock.get(f'{MANAGER}/Logs/Sel', json=first_page)
+    await setup_entry(hass)
+
+    health = hass.states.get(entity_id(hass, 'binary_sensor', 'health'))
+    assert health.attributes['latest_problem'] == 'Power supply 2 is not receiving input power.'

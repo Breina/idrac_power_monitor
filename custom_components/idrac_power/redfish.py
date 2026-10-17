@@ -45,6 +45,8 @@ SEL_ENTRIES = LOG_SERVICES + '/Sel/Entries'
 SEL_LEGACY = MANAGER + '/Logs/Sel'
 # The log is a large resource on a slow controller: no need to read it more often
 ALERTS_MIN_INTERVAL = 60
+# A log listed oldest first is paged through to its newest entries, up to this many pages
+MAX_LOG_PAGES = 20
 # Enough for a whole /Power or /Thermal answer of a 2U server
 LOGGED_RESPONSE_CHARS = 30000
 
@@ -100,13 +102,31 @@ def parse_log_entry(entry: dict) -> Alert | None:
     severity = entry.get('Severity') or 'OK'
     if severity not in ('OK', 'Warning', 'Critical'):
         severity = 'OK'
+    sensor = entry.get('SensorNumber')
+    if sensor is None:
+        sensor = _member(entry.get('SensorType'))
     return Alert(
         id=str(entry_id),
         created=entry.get('Created') or '',
         severity=severity,
         message=message,
-        message_id=entry.get('MessageId') or entry.get('EntryCode') or None,
+        message_id=entry.get('MessageId') or None,
+        sensor=None if sensor in (None, '') else str(sensor),
+        assertion=_member(entry.get('EntryCode')),
     )
+
+
+def _member(value) -> str | None:
+    """Dell wraps enum values as [{"Member": "Assert"}]; Redfish uses plain strings."""
+    if isinstance(value, list):
+        value = value[0] if value else None
+    if isinstance(value, dict):
+        value = value.get('Member')
+    return value if isinstance(value, str) and value else None
+
+
+def _created(entry: dict) -> str:
+    return entry.get('Created') or ''
 
 
 def _numeric_id(value: str):
@@ -300,14 +320,35 @@ class IdracRedfish(IdracClient):
         members = log.get('Members') or []
         self._dump_once('System Event Log', {'path': self._sel_path, 'count': len(members),
                                              'keys': sorted(log), 'first': members[:2], 'last': members[-3:]})
+        members = await self._newest_log_page(log, members)
         alerts = []
-        for entry in log.get('Members') or []:
+        for entry in members:
             alert = parse_log_entry(entry)
             if alert is not None:
                 alerts.append(alert)
         alerts.sort(key=lambda alert: (alert.created, _numeric_id(alert.id)))
         self._alerts = data.alerts = alerts
         self._alerts_read_at = time.monotonic()
+
+    async def _newest_log_page(self, log: dict, members: list[dict]) -> list[dict]:
+        """Entries of the page holding the newest ones.
+
+        iDRAC 7/8 list the log newest first, 50 per page: the first page is
+        the one that matters. A log listed oldest first is followed to its
+        last page.
+        """
+        next_link = log.get('Members@odata.nextLink')
+        if not next_link or len(members) < 2 or _created(members[0]) >= _created(members[-1]):
+            return members
+        for _ in range(MAX_LOG_PAGES):
+            page = await self.get_json(next_link)
+            if not page or not page.get('Members'):
+                break
+            members = page['Members']
+            next_link = page.get('Members@odata.nextLink')
+            if not next_link:
+                break
+        return members
 
     async def _find_sel(self) -> str:
         """Path of the SEL entry collection.

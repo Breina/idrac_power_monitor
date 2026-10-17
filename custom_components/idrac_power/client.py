@@ -63,6 +63,10 @@ class Alert:
     severity: str  # Redfish severity: OK, Warning or Critical
     message: str
     message_id: str | None = None
+    # What raised it (SensorNumber / sensor type) and whether it raises or
+    # clears that condition: a SEL "Deassert" ends an earlier "Assert".
+    sensor: str | None = None
+    assertion: str | None = None  # 'Assert', 'Deassert' or None
 
     @property
     def key(self) -> str:
@@ -85,6 +89,23 @@ class IdracData:
     psu_input_watts: dict[str, float] = field(default_factory=dict)
     # System Event Log, oldest first; None when this iDRAC's log can't be read
     alerts: list[Alert] | None = None
+
+
+def active_problems(alerts: list[Alert]) -> list[Alert]:
+    """Warning / critical entries not cleared by a later entry for the same sensor.
+
+    `alerts` is oldest first. A later deassert (or OK entry) for the same
+    sensor ends the problem: "PSU 2 input lost" followed seconds later by
+    "PSU 2 input restored" leaves nothing active.
+    """
+    active: dict[str, Alert] = {}
+    for alert in alerts:
+        key = alert.sensor or alert.message
+        if alert.severity != 'OK' and alert.assertion != 'Deassert':
+            active[key] = alert
+        else:
+            active.pop(key, None)
+    return sorted(active.values(), key=lambda alert: alert.created)
 
 
 def as_number(value) -> float | int | None:
