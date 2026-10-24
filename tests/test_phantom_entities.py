@@ -41,6 +41,7 @@ def r730xd(degraded: bool) -> dict:
         CHASSIS: {'Name': 'Computer System Chassis', 'Manufacturer': 'Dell Inc.',
                   'Model': 'PowerEdge R730xd', 'SerialNumber': 'CN123'},
         f'{BASE}/Managers/iDRAC.Embedded.1': {'FirmwareVersion': '2.86.86.86'},
+        f'{BASE}/Managers/iDRAC.Embedded.1/LogServices/Sel/Entries': {'Members': []},
         f'{BASE}/Systems/System.Embedded.1': {'PowerState': 'On', 'Status': {'HealthRollup': 'OK'}},
         f'{CHASSIS}/Power': {'PowerControl': [{'PowerConsumedWatts': 158}], 'PowerSupplies': psus},
         f'{CHASSIS}/Thermal': {'Fans': fans, 'Temperatures': temps},
@@ -77,7 +78,8 @@ async def test_null_entries_add_no_entities(hass: HomeAssistant, aioclient_mock:
     assert unique_ids(hass, entry) == healthy
     # The real entries behind the null ones are still read
     data = entry.runtime_data.data
-    assert data.power_supplies['PSU.Slot.1'] == ('PS1 Status', True)
+    supply = data.power_supplies['PSU.Slot.1']
+    assert (supply.name, supply.healthy) == ('PS1 Status', True)
     assert data.fans['0x17||Fan.Embedded.1'].value == 3600
     assert data.temperatures['iDRAC.Embedded.1#CPU1Temp'].value == 45
     # The raw answer is logged at debug level, for the next iDRAC oddity
