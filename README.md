@@ -81,7 +81,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for running the tests and cutting a relea
 
 ## Changelog
 
-### Unreleased
+### 1.9.0
 - **Alerts** (#50): an Alert event entity fires for each new System Event Log entry (Redfish), and the hardware health sensor shows the latest warning or critical entry. Entries logged while Home Assistant was down are reported once it is back; a cleared log is handled.
 - **Input voltage per PSU** (`LineInputVoltage`, or the PSU metrics on newer iDRAC 9 firmware): 0 V when a PSU has lost its feed. With each PSU on its own feed this tells which feeds are live, which PSU health alone does not (a PSU with a failed fan still draws power).
 - **Input power per PSU** where the iDRAC reports it (`PowerInputWatts` on `/Power`, `InputPowerWatts` through the PSU metrics on newer iDRAC 9 firmware). iDRAC 7/8 firmware puts the PSU's rated input there (900 W for a 750 W supply): such values are recognised and no sensor is created.
