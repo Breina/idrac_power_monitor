@@ -14,8 +14,20 @@ import xml.etree.ElementTree as ET
 import aiohttp
 
 from .client import (
-    POWER_FORCE_OFF, POWER_FORCE_RESTART, POWER_GRACEFUL_SHUTDOWN, POWER_ON, REQUEST_TIMEOUT, CannotConnect, IdracClient, IdracData, IdracInfo,
-    InvalidAuth, Reading, SessionLimit, as_number,
+    POWER_FORCE_OFF,
+    POWER_FORCE_RESTART,
+    POWER_GRACEFUL_SHUTDOWN,
+    POWER_ON,
+    REQUEST_TIMEOUT,
+    CannotConnect,
+    IdracClient,
+    IdracData,
+    IdracInfo,
+    InvalidAuth,
+    PowerSupply,
+    Reading,
+    SessionLimit,
+    as_number,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -219,7 +231,7 @@ def parse_poll(root: ET.Element) -> IdracData:
                 # iDRAC 6 names PSUs by <location>, iDRAC 7/8 by <name>
                 name = _text(sensor, 'name') or _text(sensor, 'location')
                 if name:
-                    data.power_supplies[name] = (name, _status_ok(sensor))
+                    data.power_supplies[name] = PowerSupply(name, _status_ok(sensor))
                 continue
             name = _text(sensor, 'name')
             if not name:

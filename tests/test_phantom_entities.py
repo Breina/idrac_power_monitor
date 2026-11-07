@@ -75,7 +75,8 @@ async def test_null_entries_add_no_entities(hass: HomeAssistant, aioclient_mock:
     assert unique_ids(hass, entry) == healthy
     # The real entries behind the null ones are still read
     data = entry.runtime_data.data
-    assert data.power_supplies['PSU.Slot.1'] == ('PS1 Status', True)
+    psu = data.power_supplies['PSU.Slot.1']
+    assert (psu.name, psu.healthy) == ('PS1 Status', True)
     assert data.fans['0x17||Fan.Embedded.1'].value == 3600
     assert data.temperatures['iDRAC.Embedded.1#CPU1Temp'].value == 45
     # The raw answer is logged at debug level, for the next iDRAC oddity
