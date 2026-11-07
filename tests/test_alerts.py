@@ -10,10 +10,8 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClien
 from custom_components.idrac_power import redfish
 from custom_components.idrac_power.const import DOMAIN
 
-from .conftest import no_event_log
-from .test_redfish import BASE, CHASSIS, IDRAC8
+from .common import BASE, CHASSIS, IDRAC8, MANAGER, no_event_log, no_web_api, setup
 
-MANAGER = f'{BASE}/Managers/iDRAC.Embedded.1'
 PREFIX = 'CN123_PowerEdge R720_'
 
 
@@ -48,9 +46,7 @@ def serve(aioclient_mock: AiohttpClientMocker, resources: dict, sel: list[dict] 
     aioclient_mock.clear_requests()
     for url, body in resources.items():
         aioclient_mock.get(url, json=body)
-    aioclient_mock.get('https://10.0.0.2/start.html', status=404)
-    aioclient_mock.post('https://10.0.0.2/data/login', status=404)
-    aioclient_mock.post('https://10.0.0.2/sysmgmt/2015/bmc/session', status=404)
+    no_web_api(aioclient_mock)
     if sel is not None:
         # iDRAC 7/8 firmware without the Sel log service: only /Logs/Sel
         aioclient_mock.get(f'{MANAGER}/LogServices', json={'Members': [
@@ -60,12 +56,8 @@ def serve(aioclient_mock: AiohttpClientMocker, resources: dict, sel: list[dict] 
 
 
 async def setup_entry(hass: HomeAssistant) -> MockConfigEntry:
-    entry = MockConfigEntry(domain=DOMAIN, entry_id='idrac1', data={
-        'host': '10.0.0.2', 'username': 'root', 'password': 'calvin', 'interval': 300, 'api': 'redfish'})
-    entry.add_to_hass(hass)
-    await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
-    return entry
+    # A fixed entry id: some tests seed the alert store, which is keyed on it
+    return await setup(hass, entry_id='idrac1')
 
 
 def entity_id(hass: HomeAssistant, domain: str, suffix: str) -> str:
@@ -175,9 +167,7 @@ async def test_idrac9_log_service_and_psu_metrics(hass: HomeAssistant, aioclient
         aioclient_mock.get(url, status=404, text='')
     for url, body in resources.items():
         aioclient_mock.get(url, json=body)
-    aioclient_mock.get('https://10.0.0.2/start.html', status=404)
-    aioclient_mock.post('https://10.0.0.2/data/login', status=404)
-    aioclient_mock.post('https://10.0.0.2/sysmgmt/2015/bmc/session', status=404)
+    no_web_api(aioclient_mock)
     await setup_entry(hass)
 
     assert hass.states.get(entity_id(hass, 'sensor', 'psu_power_PSU.Slot.1')).state == '236'
@@ -281,9 +271,7 @@ async def test_oldest_first_log_is_read_from_its_last_page(hass: HomeAssistant, 
     aioclient_mock.clear_requests()
     for url, body in idrac8().items():
         aioclient_mock.get(url, json=body)
-    aioclient_mock.get('https://10.0.0.2/start.html', status=404)
-    aioclient_mock.post('https://10.0.0.2/data/login', status=404)
-    aioclient_mock.post('https://10.0.0.2/sysmgmt/2015/bmc/session', status=404)
+    no_web_api(aioclient_mock)
     aioclient_mock.get(f'{MANAGER}/LogServices', status=404, text='')
     aioclient_mock.get(f'{MANAGER}/Logs/Sel?$skip=2', json={'Members': [NEW_ENTRY]})
     aioclient_mock.get(f'{MANAGER}/Logs/Sel', json=first_page)
@@ -349,9 +337,7 @@ async def test_idrac9_psu_input_voltage_from_metrics(hass: HomeAssistant, aiocli
         aioclient_mock.get(url, status=404, text='')
     for url, body in resources.items():
         aioclient_mock.get(url, json=body)
-    aioclient_mock.get('https://10.0.0.2/start.html', status=404)
-    aioclient_mock.post('https://10.0.0.2/data/login', status=404)
-    aioclient_mock.post('https://10.0.0.2/sysmgmt/2015/bmc/session', status=404)
+    no_web_api(aioclient_mock)
     no_event_log(aioclient_mock)
     await setup_entry(hass)
     assert hass.states.get(entity_id(hass, 'sensor', 'psu_volts_PSU.Slot.1')).state == '229'

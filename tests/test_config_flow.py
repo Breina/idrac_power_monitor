@@ -7,7 +7,7 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClien
 
 from custom_components.idrac_power.const import DOMAIN
 
-BASE = 'https://10.0.0.2/redfish/v1'
+from .common import BASE
 
 
 def redfish(aioclient_mock: AiohttpClientMocker, serial: str = 'CN123') -> None:

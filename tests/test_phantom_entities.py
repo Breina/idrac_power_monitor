@@ -15,11 +15,9 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClien
 
 from custom_components.idrac_power.const import DOMAIN
 
-from .conftest import no_event_log
-from .test_redfish import BASE, CHASSIS, setup
+from .common import BASE, CHASSIS, CONFIG, MANAGER, no_event_log, no_web_api, setup
 
 PREFIX = 'CN123_PowerEdge R730xd_'
-CONFIG = {'host': '10.0.0.2', 'username': 'root', 'password': 'calvin', 'interval': 300, 'api': 'redfish'}
 
 
 def nulls(item: dict, count: int) -> list[dict]:
@@ -41,7 +39,7 @@ def r730xd(degraded: bool) -> dict:
     return {
         CHASSIS: {'Name': 'Computer System Chassis', 'Manufacturer': 'Dell Inc.',
                   'Model': 'PowerEdge R730xd', 'SerialNumber': 'CN123'},
-        f'{BASE}/Managers/iDRAC.Embedded.1': {'FirmwareVersion': '2.86.86.86'},
+        MANAGER: {'FirmwareVersion': '2.86.86.86'},
         f'{BASE}/Systems/System.Embedded.1': {'PowerState': 'On', 'Status': {'HealthRollup': 'OK'}},
         f'{CHASSIS}/Power': {'PowerControl': [{'PowerConsumedWatts': 158}], 'PowerSupplies': psus},
         f'{CHASSIS}/Thermal': {'Fans': fans, 'Temperatures': temps},
@@ -52,9 +50,7 @@ def serve(aioclient_mock: AiohttpClientMocker, degraded: bool = False) -> None:
     aioclient_mock.clear_requests()
     for url, body in r730xd(degraded).items():
         aioclient_mock.get(url, json=body)
-    aioclient_mock.get('https://10.0.0.2/start.html', status=404)
-    aioclient_mock.post('https://10.0.0.2/data/login', status=404)
-    aioclient_mock.post('https://10.0.0.2/sysmgmt/2015/bmc/session', status=404)
+    no_web_api(aioclient_mock)
     no_event_log(aioclient_mock)
 
 
