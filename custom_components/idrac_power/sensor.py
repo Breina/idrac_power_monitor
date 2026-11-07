@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
-from homeassistant.const import REVOLUTIONS_PER_MINUTE, UnitOfEnergy, UnitOfPower, UnitOfTemperature
+from homeassistant.const import REVOLUTIONS_PER_MINUTE, UnitOfElectricPotential, UnitOfEnergy, UnitOfPower, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -23,8 +23,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: IdracConfigEntry, async_
             yield f'fan_{fan_id}', lambda i=fan_id, n=fan.name: IdracFanSensor(coordinator, i, n)
         for temp_id, temp in data.temperatures.items():
             yield f'temp_{temp_id}', lambda i=temp_id, n=temp.name: IdracTempSensor(coordinator, i, n)
+        for psu_id in data.psu_input_watts:
+            name = psu_label(data.power_supplies.get(psu_id, (psu_id, None))[0])
+            yield f'psu_power_{psu_id}', lambda i=psu_id, n=name: IdracPsuPowerSensor(coordinator, i, n)
+        for psu_id in data.psu_input_volts:
+            name = psu_label(data.power_supplies.get(psu_id, (psu_id, None))[0])
+            yield f'psu_volts_{psu_id}', lambda i=psu_id, n=name: IdracPsuVoltageSensor(coordinator, i, n)
 
     add_entities_as_they_appear(coordinator, async_add_entities, build)
+
+
+def psu_label(name: str) -> str:
+    """"PS1 Status" -> "PS1": the iDRAC names PSUs after their health sensor."""
+    return name.removesuffix(' Status').strip() or name
 
 
 class IdracPowerSensor(IdracEntity, SensorEntity):
@@ -91,3 +102,47 @@ class IdracTempSensor(IdracEntity, SensorEntity):
     @property
     def native_value(self):
         return self.coordinator.data.temperatures[self.temp_id].value
+
+
+class IdracPsuPowerSensor(IdracEntity, SensorEntity):
+    """Power one PSU draws from its feed: with two feeds, what each feed supplies."""
+    _attr_icon = 'mdi:power-plug'
+    _attr_native_unit_of_measurement = UnitOfPower.WATT
+    _attr_device_class = SensorDeviceClass.POWER
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, coordinator: IdracCoordinator, psu_id: str, label: str):
+        super().__init__(coordinator, f'psu_power_{psu_id}', f'{label} input power')
+        self.psu_id = psu_id
+
+    @property
+    def available(self) -> bool:
+        return super().available and self.psu_id in self.coordinator.data.psu_input_watts
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.psu_input_watts[self.psu_id]
+
+
+class IdracPsuVoltageSensor(IdracEntity, SensorEntity):
+    """Line voltage at one PSU's input: 0 V when it has lost its feed.
+
+    With each PSU on its own feed, this tells which feeds are live, which
+    PSU health alone does not (a PSU with a failed fan still draws power).
+    """
+    _attr_icon = 'mdi:sine-wave'
+    _attr_native_unit_of_measurement = UnitOfElectricPotential.VOLT
+    _attr_device_class = SensorDeviceClass.VOLTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, coordinator: IdracCoordinator, psu_id: str, label: str):
+        super().__init__(coordinator, f'psu_volts_{psu_id}', f'{label} input voltage')
+        self.psu_id = psu_id
+
+    @property
+    def available(self) -> bool:
+        return super().available and self.psu_id in self.coordinator.data.psu_input_volts
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.psu_input_volts[self.psu_id]
