@@ -197,3 +197,18 @@ async def test_powered_off_psus_are_unknown_not_a_problem(hass: HomeAssistant, a
     assert states['PowerEdge R910 PS 2'] == 'unknown'
     # Nothing known yet: no health sensor rather than a false alarm
     assert states.get('PowerEdge R910 Hardware health') != 'on'
+
+
+async def test_answer_to_another_request_is_rejected(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker):
+    """An out-of-step iDRAC 6 hands out earlier answers: never publish them as this poll's data."""
+    idrac6(aioclient_mock)
+    entry = await setup_idrac6(hass)
+    assert friendly_states(hass)['PowerEdge R910 Server status'] == 'on'
+
+    # The poll is answered with the answer to the info request
+    aioclient_mock.clear_requests()
+    idrac6(aioclient_mock, poll='idrac6_info.xml')
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    assert not entry.runtime_data.last_update_success
+    assert friendly_states(hass)['PowerEdge R910 Server status'] == 'unavailable'

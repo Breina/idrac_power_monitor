@@ -154,6 +154,7 @@ class IdracLegacy(IdracClient):
                     except ET.ParseError as err:
                         raise CannotConnect(f'Unparsable answer from {self.host}: {text[:200]!r}') from err
                     if _text(root, 'status') != 'fail' or attempt == 2:
+                        _check_answers(root, params, self.host)
                         return root
                 # Session timed out, or the iDRAC rebooted: log in again, once
                 _LOGGER.debug('Session on %s rejected (HTTP %s), logging in again', self.host, response.status)
@@ -239,3 +240,17 @@ def parse_poll(root: ET.Element) -> IdracData:
         # still measures what the server draws in standby (26 W on an R710).
         data.power_watts = _number(_text(root, './/powermonitordata/pcAveLm'))
     return data
+
+
+def _check_answers(root: ET.Element, params: dict[str, str], host: str) -> None:
+    """Make sure the answer is to this request.
+
+    An iDRAC 6 web server can fall out of step and hand every request the
+    answer to an earlier one (seen after GET requests on /data, which its own
+    GUI never sends); only an iDRAC reset brings it back. Parsing such an
+    answer would publish another request's data, e.g. a server "off".
+    """
+    wanted = params.get('get', '').split(',')[0]
+    if wanted and root.find(f'.//{wanted}') is None and _text(root, 'status') != 'fail':
+        raise CannotConnect(f'{host} answered with data for another request (expected <{wanted}>): '
+                            'its web server is out of step, reset the iDRAC')
