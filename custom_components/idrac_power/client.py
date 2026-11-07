@@ -5,6 +5,7 @@ import ssl
 import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from typing import Any
 
 import aiohttp
 from homeassistant.exceptions import HomeAssistantError
@@ -200,3 +201,7 @@ class IdracClient(ABC):
 
     async def close(self) -> None:
         """Release server-side resources (sessions)."""
+
+    def diagnostics(self) -> dict[str, Any]:
+        """What the client found out about this iDRAC, for diagnostics downloads."""
+        return {}

@@ -559,3 +559,12 @@ class IdracRedfish(IdracClient):
     async def close(self) -> None:
         if self._data_api is not None:
             await self._data_api.close()
+
+    def diagnostics(self) -> dict:
+        return {
+            'firmware': self._firmware,
+            'thermal_source': self._thermal_source,
+            'energy_source': self._energy_source,
+            'energy_unsupported': sorted(self._energy_unsupported),
+            'event_log': self._sel_path,
+        }
