@@ -4,6 +4,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
+from custom_components.idrac_power import redfish
 from custom_components.idrac_power.const import DOMAIN
 
 from .common import BASE, CHASSIS, IDRAC8, serve, setup
@@ -91,3 +92,62 @@ async def test_power_switch_posts_reset(hass: HomeAssistant, aioclient_mock: Aio
         resets = [call for call in aioclient_mock.mock_calls if str(call[1]).endswith('ComputerSystem.Reset')]
         assert resets[-1][2] == {'ResetType': reset_type}
 
+
+async def test_refused_resource_after_the_system_one_is_no_reason_to_reauthenticate(
+        hass: HomeAssistant, aioclient_mock: AiohttpClientMocker):
+    """The credentials were just accepted: a 403 further on is a missing privilege."""
+    aioclient_mock.get(f'{CHASSIS}/Thermal', status=403, text='')
+    serve(aioclient_mock, IDRAC8)
+    entry = await setup(hass)
+
+    assert entry.state is ConfigEntryState.LOADED
+    assert not hass.config_entries.flow.async_progress()
+    states = {s.attributes.get('friendly_name'): s.state for s in hass.states.async_all()}
+    assert states['PowerEdge R720 Power usage'] == '112'
+    assert not any(name.endswith('Fan1A') for name in states)
+
+
+def logins(aioclient_mock: AiohttpClientMocker) -> int:
+    return sum(1 for call in aioclient_mock.mock_calls if str(call[1]).endswith(('/data/login', '/bmc/session')))
+
+
+async def test_refused_energy_login_is_not_retried(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker,
+                                                   monkeypatch):
+    """#51: every attempt is a failed login in the iDRAC's audit log."""
+    monkeypatch.setattr(redfish, 'ENERGY_RETRY_AFTER_ERROR', 0)
+    # iDRAC 7: the account may use Redfish, not the web GUI (authResult 1)
+    aioclient_mock.get(f'{BASE}/Managers/iDRAC.Embedded.1', json={'FirmwareVersion': '2.65.65.65'})
+    aioclient_mock.get('https://10.0.0.2/start.html', text='')
+    aioclient_mock.post('https://10.0.0.2/data/login', text='<root><authResult>1</authResult></root>')
+    serve(aioclient_mock, IDRAC8)
+    entry = await setup(hass)
+    assert logins(aioclient_mock) == 1
+
+    for _ in range(3):
+        await entry.runtime_data.async_refresh()
+    assert logins(aioclient_mock) == 1
+    assert entry.state is ConfigEntryState.LOADED
+    assert entry.runtime_data.client.diagnostics()['energy_unsupported'] == ['data']
+
+
+async def test_refused_sysmgmt_login_is_not_retried(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker,
+                                                    monkeypatch):
+    monkeypatch.setattr(redfish, 'ENERGY_RETRY_AFTER_ERROR', 0)
+    aioclient_mock.get(f'{BASE}/Managers/iDRAC.Embedded.1', json={'FirmwareVersion': '4.40.00.00'})
+    aioclient_mock.post('https://10.0.0.2/sysmgmt/2015/bmc/session', status=401, json={'authResult': 1})
+    serve(aioclient_mock, IDRAC8)
+    entry = await setup(hass)
+    await entry.runtime_data.async_refresh()
+    assert logins(aioclient_mock) == 2  # one refused sysmgmt login, plus the /data login that answered 404
+
+
+async def test_failing_energy_source_is_tried_again_later(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker,
+                                                          monkeypatch):
+    monkeypatch.setattr(redfish, 'ENERGY_RETRY_AFTER_ERROR', 0)
+    aioclient_mock.get(f'{BASE}/Managers/iDRAC.Embedded.1', json={'FirmwareVersion': '2.65.65.65'})
+    aioclient_mock.get('https://10.0.0.2/start.html', text='')
+    aioclient_mock.post('https://10.0.0.2/data/login', status=500)
+    serve(aioclient_mock, IDRAC8)
+    entry = await setup(hass)
+    await entry.runtime_data.async_refresh()
+    assert logins(aioclient_mock) == 2
