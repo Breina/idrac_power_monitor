@@ -1,0 +1,72 @@
+name: Release
+
+# Actions > Release > Run workflow, with the version to publish (e.g. 1.9.0).
+# Runs the checks, sets that version in manifest.json, commits it, tags the
+# commit and publishes the GitHub release with generated notes, in that order.
+#
+# Never tag by hand: the old flow bumped the manifest after the tag was pushed
+# and then moved the tag, and deleting a tag turns its release back into a
+# draft that HACS does not offer (that is how 1.8.1 went unpublished).
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version, without the v (e.g. 1.9.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  tests:
+    uses: ./.github/workflows/tests.yaml
+  hassfest:
+    uses: ./.github/workflows/hassfest.yaml
+  hacs:
+    uses: ./.github/workflows/validate.yaml
+
+  release:
+    needs: [tests, hassfest, hacs]
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ inputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Check the version
+        run: |
+          if [[ "${GITHUB_REF}" != "refs/heads/master" ]]; then
+            echo "::error::Release from master, not ${GITHUB_REF}"; exit 1
+          fi
+          if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Version must look like 1.2.3, got '${VERSION}'"; exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/v${VERSION}" >/dev/null; then
+            echo "::error::Tag v${VERSION} already exists"; exit 1
+          fi
+
+      - name: Set the version in manifest.json
+        run: |
+          manifest=custom_components/idrac_power/manifest.json
+          jq --arg version "${VERSION}" '.version = $version' "${manifest}" > manifest.tmp
+          mv manifest.tmp "${manifest}"
+
+      - name: Commit and tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Release ${VERSION}" || echo "manifest.json already at ${VERSION}"
+          git tag "v${VERSION}"
+          # Fails, without tagging anything, if master moved since the checks ran
+          git push --atomic origin HEAD:master "v${VERSION}"
+
+      - name: Publish the release
+        run: gh release create "v${VERSION}" --title "v${VERSION}" --generate-notes --verify-tag --latest

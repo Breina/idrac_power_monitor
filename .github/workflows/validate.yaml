@@ -1,10 +1,8 @@
 name: Validate
 
-# Blocking at release time only: everything is checked locally before tagging.
+# Run by the Release workflow before it tags anything, or by hand.
 on:
-  push:
-    tags:
-      - 'v*.*.*'
+  workflow_call:
   workflow_dispatch:
 
 jobs:
