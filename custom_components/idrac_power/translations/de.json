@@ -1,9 +1,9 @@
 {
-  "title": "iDRAC-Leistungsmonitor",
+  "title": "iDRAC Server Monitor",
   "config": {
     "step": {
       "user": {
-        "title": "iDRAC-Leistungsmonitor",
+        "title": "iDRAC Server Monitor",
         "description": "Funktioniert mit iDRAC 6, 7, 8 und 9. Redfish wird verwendet, wenn verfügbar, sonst die iDRAC-Weboberfläche.",
         "data": {
           "host": "Hostname oder IP-Adresse des iDRAC (ohne https://)",
