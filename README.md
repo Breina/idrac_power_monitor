@@ -1,6 +1,6 @@
-# iDRAC power monitor
+# iDRAC Server Monitor
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+[![hacs_badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/integration)
 
 Monitor and control Dell PowerEdge servers from Home Assistant through their iDRAC, from **iDRAC 6 to iDRAC 9**:
 
@@ -9,7 +9,7 @@ Monitor and control Dell PowerEdge servers from Home Assistant through their iDR
 - Temperatures and fan speeds
 - Hardware health and per power supply health (problem sensors, e.g. to shut down when a PSU loses input)
 - Alerts: every new entry in the iDRAC's System Event Log fires the **Alert** event entity (`critical`, `warning` or `ok`, with the message), and the latest warning shows on the hardware health sensor (Redfish: iDRAC 7/8/9)
-- Input power per power supply, when the iDRAC reports it: with each PSU on its own feed, what each feed supplies
+- Input power and input voltage per power supply, when the iDRAC reports them: with each PSU on its own feed, what each feed supplies and which feeds are live
 
 No extra Python dependency: everything goes through the iDRAC's own HTTPS APIs.
 
@@ -27,18 +27,12 @@ The API is detected when the server is added and remembered.
 
 ## Installation
 
-> **Note**
->
-> This integration requires [HACS](https://github.com/hacs/integration) to be installed
+Through [HACS](https://hacs.xyz):
 
-1. Open HACS
-2. `+ EXPLORE & DOWNLOAD REPOSITORIES`
-3. Find `iDRAC power monitor` in this list
-4. `DOWNLOAD THIS REPOSITORY WITH HACS`
-5. `DOWNLOAD`
-6. Restart Home Assistant (_Settings_ > _System_ > _RESTART_)
-7. _Settings_ > _Devices & services_ > _Add integration_ > `iDRAC power monitor`
-8. Enter the IP address or hostname of the iDRAC, its username (`root` by default) and password (`calvin` by default).
+1. In HACS, search for **iDRAC Server Monitor** and download it
+2. Restart Home Assistant
+3. _Settings_ > _Devices & services_ > _Add integration_ > **iDRAC Server Monitor**
+4. Enter the IP address or hostname of the iDRAC, its username (`root` by default) and password (`calvin` by default)
 
 Host, username and password can be changed later with _Reconfigure_ on the integration entry; the polling interval with _Configure_.
 
@@ -66,11 +60,20 @@ The log is read at most once a minute, whatever the polling interval.
 
 ## Troubleshooting
 
-`scripts/idrac_probe.py` queries an iDRAC with the integration's own code and prints what it reads (`--raw` adds the XML of the iDRAC 6 web API). Run it from a clone of this repository in an environment where Home Assistant is installed, and attach its output to issues about missing or wrong readings:
+For an issue about a missing or wrong reading, please attach:
+
+1. **Diagnostics**: _Settings_ > _Devices & services_ > _iDRAC Server Monitor_ > the server > _Download diagnostics_. It holds what the integration last read and how it reads this iDRAC, with the credentials, host and service tag removed.
+2. **A debug log**, which includes the iDRAC's raw answers once per start: on the integration entry, _Enable debug logging_, wait for a poll or two, then _Disable debug logging_ to download the log.
+
+`scripts/idrac_probe.py` queries an iDRAC with the integration's own code without going through Home Assistant (`--raw` adds the XML of the iDRAC 6 web API). Run it from a clone of this repository, in an environment where Home Assistant is installed:
 
 ```
 python scripts/idrac_probe.py 192.168.1.120 root calvin --raw
 ```
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for running the tests and cutting a release.
 
 ## Screenshots
 
@@ -79,23 +82,30 @@ python scripts/idrac_probe.py 192.168.1.120 root calvin --raw
 ## Changelog
 
 ### Unreleased
-- **Alerts**: an Alert event entity fires for each new System Event Log entry (Redfish), and the hardware health sensor shows the latest warning or critical entry. Entries logged while Home Assistant was down are reported once it is back; a cleared log is handled.
+- **Alerts** (#50): an Alert event entity fires for each new System Event Log entry (Redfish), and the hardware health sensor shows the latest warning or critical entry. Entries logged while Home Assistant was down are reported once it is back; a cleared log is handled.
 - **Input voltage per PSU** (`LineInputVoltage`, or the PSU metrics on newer iDRAC 9 firmware): 0 V when a PSU has lost its feed. With each PSU on its own feed this tells which feeds are live, which PSU health alone does not (a PSU with a failed fan still draws power).
 - **Input power per PSU** where the iDRAC reports it (`PowerInputWatts` on `/Power`, `InputPowerWatts` through the PSU metrics on newer iDRAC 9 firmware). iDRAC 7/8 firmware puts the PSU's rated input there (900 W for a 750 W supply): such values are recognised and no sensor is created.
-- **Fewer failed logins**: the iDRAC 9 `sysmgmt` energy API is no longer tried on iDRAC 7/8, and an energy source whose login is refused is retried after 6 hours instead of on every poll (each attempt slowed the poll down and added a failed login to the iDRAC's log)
+- **No more failed logins on every poll** (#51): the iDRAC 9 `sysmgmt` energy API is no longer tried on iDRAC 7/8, and an energy source whose login is refused is not tried again until the integration is reloaded. Each attempt added a failed login to the iDRAC's audit log; other failures are retried after an hour.
+- A 401/403 on a resource read after the credentials were accepted (an account missing a privilege) no longer fails the poll and asks for new credentials
+- **Diagnostics download**, for issue reports
+- Internals: power supplies are a dataclass, sensors and binary sensors are entity descriptions, Home Assistant's `CONF_*` constants are used throughout; releases are cut by a Release workflow that no longer moves tags (which turned the 1.8.1 release back into a draft)
 
-### 2.0.0
-- iDRAC 6 support through the iDRAC web GUI API, without any new dependency (upstream #32, supersedes upstream PR #44 which needed IPMI)
+### 1.8.1
+- Phantom "PSU N", "None" fan and "None" temperature entities, created when an iDRAC 8 put entries without identifiers in front of the real ones, are no longer created, and those registered by 1.8.0 are removed on startup (#48, #49)
+
+### 1.8.0
+
+- iDRAC 6 support through the iDRAC web GUI API, without any new dependency (#32, supersedes #44 which needed IPMI)
   - verified on real PowerEdge R510 and R710 (iDRAC6 firmware 2.92): power from the `systemLevel` sensor shown on the iDRAC power page (`pmReading`/`ipowerWatts1` only cover part of the load), energy from the power tracking counter (`ptsReadingc1`, kWh), standby power from the one-minute average while the host is off
 - Fan, temperature, power supply and health entities appear when the server is powered on, for servers added while off (the iDRAC publishes no sensors then)
 - New entries are titled with the service tag, to tell identical servers apart
 - iDRAC 7/8 without Redfish (old firmware, or Redfish disabled) now fall back to the same web API instead of failing
-- iDRAC 9: fans and temperatures from `ThermalSubsystem`/`Sensors` when `/Thermal` is missing or incomplete, power and energy from `EnvironmentMetrics` (upstream #19, #36, based on upstream PR #38 with its odata path bug fixed and without the hardcoded model list)
-- "Server status" and the power switch now follow the host power state; they used the chassis health state and showed "running" on powered-off servers (upstream #19)
-- New hardware health and per power supply problem sensors (upstream #25, #29)
+- iDRAC 9: fans and temperatures from `ThermalSubsystem`/`Sensors` when `/Thermal` is missing or incomplete, power and energy from `EnvironmentMetrics` (#19, #36, based on #38 with its odata path bug fixed and without the hardcoded model list)
+- "Server status" and the power switch now follow the host power state; they used the chassis health state and showed "running" on powered-off servers (#19)
+- New hardware health and per power supply problem sensors (#25, #29)
 - A powered-off iDRAC 6 reports its power supplies as "Unknown"; they read as unknown rather than as a problem
 - Force power off and Force restart buttons, which cut the power or hard-reset the server without asking its operating system (Redfish `ForceOff` / `ForceRestart`, iDRAC 6 `pwState` 0 / 3); power on, graceful shutdown and both forced actions verified on a real R710 (iDRAC6 2.92)
-- Host, username and password can be changed with _Reconfigure_, the polling interval with _Configure_; expired credentials trigger a re-authentication prompt (upstream #37)
+- Host, username and password can be changed with _Reconfigure_, the polling interval with _Configure_; expired credentials trigger a re-authentication prompt (#37)
 - A pasted `https://…` URL is accepted as host; a server can no longer be added twice
 - The HTTP session is released with `detach()` instead of being closed, as it shares Home Assistant's connector
 - Energy: no more `sysmgmt` login on every poll when Redfish already provides the counter; the energy sensor is only created when the iDRAC provides energy data
