@@ -30,6 +30,11 @@ ALERT_STORE_VERSION = 1
 MAX_NEW_ALERTS = 10
 
 
+def alert_store(hass: HomeAssistant, entry: ConfigEntry) -> Store[dict]:
+    """Which event log entries were already reported, per config entry."""
+    return Store(hass, ALERT_STORE_VERSION, f'{DOMAIN}.{entry.entry_id}.alerts')
+
+
 class IdracCoordinator(DataUpdateCoordinator[IdracData]):
     config_entry: ConfigEntry
 
@@ -43,7 +48,7 @@ class IdracCoordinator(DataUpdateCoordinator[IdracData]):
         self.info = info
         # Event log entries already reported, kept across restarts so entries
         # logged while Home Assistant was down are still reported, once.
-        self._alert_store: Store[dict] = Store(hass, ALERT_STORE_VERSION, f'{DOMAIN}.{entry.entry_id}.alerts')
+        self._alert_store = alert_store(hass, entry)
         self._seen_alerts: set[str] | None = None
         # Entries that appeared in the latest poll; read by the alert event entity
         self.new_alerts: list[Alert] = []
@@ -84,6 +89,3 @@ class IdracCoordinator(DataUpdateCoordinator[IdracData]):
             await self._alert_store.async_save({'seen': sorted(current)})
         for alert in self.new_alerts:
             _LOGGER.info('%s logged (%s): %s', self.info.model, alert.severity, alert.message)
-
-    async def async_remove_alert_store(self) -> None:
-        await self._alert_store.async_remove()
