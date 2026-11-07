@@ -75,6 +75,22 @@ class Alert:
 
 
 @dataclass
+class PowerSupply:
+    """One power supply; a reading is None when the iDRAC reports none for it."""
+    name: str
+    healthy: bool | None
+    # Live input power (W); never the PSU's rated input, which iDRAC 7/8 report in its place
+    input_watts: float | None = None
+    # Line input voltage: 0 V when the PSU has lost its feed
+    input_volts: float | None = None
+
+    @property
+    def label(self) -> str:
+        """"PS1 Status" -> "PS1": the iDRAC names PSUs after their health sensor."""
+        return self.name.removesuffix(' Status').strip() or self.name
+
+
+@dataclass
 class IdracData:
     """One poll's worth of data. None means "not available on this iDRAC"."""
     power_on: bool | None = None
@@ -83,12 +99,7 @@ class IdracData:
     health_ok: bool | None = None
     fans: dict[str, Reading] = field(default_factory=dict)
     temperatures: dict[str, Reading] = field(default_factory=dict)
-    # PSU id -> (name, healthy)
-    power_supplies: dict[str, tuple[str, bool | None]] = field(default_factory=dict)
-    # PSU id -> input power (W), only for PSUs whose iDRAC reports it
-    psu_input_watts: dict[str, float] = field(default_factory=dict)
-    # PSU id -> input (line) voltage; 0 V means the PSU has no input power
-    psu_input_volts: dict[str, float | None] = field(default_factory=dict)
+    power_supplies: dict[str, PowerSupply] = field(default_factory=dict)
     # System Event Log, oldest first; None when this iDRAC's log can't be read
     alerts: list[Alert] | None = None
 
@@ -185,7 +196,7 @@ class IdracClient(ABC):
 
     @abstractmethod
     async def set_power(self, action: str) -> None:
-        """Apply POWER_ON or POWER_GRACEFUL_SHUTDOWN."""
+        """Apply one of the POWER_* actions."""
 
     async def close(self) -> None:
         """Release server-side resources (sessions)."""

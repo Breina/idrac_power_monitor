@@ -16,6 +16,7 @@ from .client import (
     IdracData,
     IdracInfo,
     InvalidAuth,
+    PowerSupply,
     Reading,
     RedfishConfig,
     SessionLimit,
@@ -95,16 +96,14 @@ def is_idrac9_firmware(firmware: str | None) -> bool:
     return not major.isdigit() or int(major) >= 3
 
 
-def plausible_psu_inputs(inputs: dict[str, float], total_watts: float | None) -> bool:
+def plausible_psu_inputs(inputs: list[float], total_watts: float | None) -> bool:
     """Whether per-PSU input readings are live values.
 
     iDRAC 7/8 firmware fills PowerInputWatts with the PSU's rated input
     (900 W for a 750 W supply) whatever the load: such values add up to far
     more than the whole server draws.
     """
-    if not inputs or total_watts is None:
-        return bool(inputs)
-    return sum(inputs.values()) <= total_watts * 1.5 + 50
+    return total_watts is None or sum(inputs) <= total_watts * 1.5 + 50
 
 
 def parse_log_entry(entry: dict) -> Alert | None:
@@ -289,16 +288,16 @@ class IdracRedfish(IdracClient):
                 continue
             if status.get('State') == 'Absent':
                 continue
-            data.power_supplies[psu_id] = (supply.get('Name') or psu_id, health_ok(status))
             metrics = await self._psu_metrics(supply)
-            if (watts := psu_input_watts(supply, metrics)) is not None:
-                data.psu_input_watts[psu_id] = watts
-            if 'LineInputVoltage' in supply or 'InputVoltage' in metrics:
-                data.psu_input_volts[psu_id] = psu_input_volts(supply, metrics)
-        if not plausible_psu_inputs(data.psu_input_watts, data.power_watts):
-            _LOGGER.debug('Per-PSU input power on %s (%s) exceeds the server total (%s W): not live readings',
-                          self.host, data.psu_input_watts, data.power_watts)
-            data.psu_input_watts = {}
+            data.power_supplies[psu_id] = PowerSupply(
+                name=supply.get('Name') or psu_id, healthy=health_ok(status),
+                input_watts=psu_input_watts(supply, metrics), input_volts=psu_input_volts(supply, metrics))
+        inputs = [psu.input_watts for psu in data.power_supplies.values() if psu.input_watts is not None]
+        if inputs and not plausible_psu_inputs(inputs, data.power_watts):
+            _LOGGER.debug('Per-PSU input power on %s (%s W) exceeds the server total (%s W): not live readings',
+                          self.host, inputs, data.power_watts)
+            for psu in data.power_supplies.values():
+                psu.input_watts = None
         self._log_unidentified(POWER if power is not None else POWER_SUPPLIES, {'power supplies': skipped},
                                 power if power is not None else supplies)
 
