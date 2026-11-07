@@ -1,8 +1,5 @@
 DOMAIN = 'idrac_power'
 
-HOST = 'host'
-USERNAME = 'username'
-PASSWORD = 'password'
 CONF_INTERVAL = 'interval'
 CONF_INTERVAL_DEFAULT = 300
 CONF_INTERVAL_MIN = 10

@@ -1,19 +1,18 @@
-"""iDRAC power usage monitor"""
+"""iDRAC Server Monitor: Dell PowerEdge servers through their iDRAC."""
 from __future__ import annotations
 
 import logging
 import re
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import Platform
+from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.storage import Store
 
 from .client import CannotConnect, InvalidAuth, RedfishConfig, SessionLimit
-from .const import CONF_API, HOST, PASSWORD, USERNAME
-from .coordinator import IdracCoordinator
+from .const import CONF_API
+from .coordinator import IdracCoordinator, alert_store
 from .factory import async_create_client
 
 _LOGGER = logging.getLogger(__name__)
@@ -30,10 +29,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: IdracConfigEntry) -> boo
     """Set up the iDRAC connection from a config entry."""
     try:
         client, info = await async_create_client(
-            hass, entry.data[HOST], entry.data[USERNAME], entry.data[PASSWORD], entry.data.get(CONF_API)
+            hass, entry.data[CONF_HOST], entry.data[CONF_USERNAME], entry.data[CONF_PASSWORD], entry.data.get(CONF_API)
         )
     except InvalidAuth as err:
-        raise ConfigEntryAuthFailed(f'Credentials rejected by {entry.data[HOST]}') from err
+        raise ConfigEntryAuthFailed(f'Credentials rejected by {entry.data[CONF_HOST]}') from err
     except (CannotConnect, RedfishConfig, SessionLimit) as err:
         raise ConfigEntryNotReady(str(err)) from err
 
@@ -91,6 +90,4 @@ async def async_unload_entry(hass: HomeAssistant, entry: IdracConfigEntry) -> bo
 
 async def async_remove_entry(hass: HomeAssistant, entry: IdracConfigEntry) -> None:
     """Forget which event log entries were already reported."""
-    from .coordinator import ALERT_STORE_VERSION
-    from .const import DOMAIN
-    await Store(hass, ALERT_STORE_VERSION, f'{DOMAIN}.{entry.entry_id}.alerts').async_remove()
+    await alert_store(hass, entry).async_remove()
