@@ -55,8 +55,8 @@ LOGGED_RESPONSE_CHARS = 30000
 SYSMGMT_SESSION = '/sysmgmt/2015/bmc/session'
 SYSMGMT_POWER = '/sysmgmt/2015/server/sensor/power'
 
-# Retry delays for an energy counter source that failed (seconds)
-ENERGY_RETRY_AFTER_REFUSED = 6 * 3600
+# An energy counter source that failed is tried again after this long (seconds).
+# One whose login is refused is not tried again until the entry is reloaded.
 ENERGY_RETRY_AFTER_ERROR = 3600
 
 ENERGY_REDFISH = 'redfish'
@@ -171,9 +171,8 @@ class IdracRedfish(IdracClient):
         self._thermal_source: str | None = None
         # Sources that answered 404 once are never asked again
         self._energy_unsupported: set[str] = set()
-        # Source -> monotonic time before which it is not tried again: a
-        # refused login is retried every poll otherwise, which slows each poll
-        # down and fills the iDRAC's log with failed logins.
+        # Source -> monotonic time before which a failed source is not tried
+        # again: every attempt slows the poll down, a lot when it times out.
         self._energy_retry_at: dict[str, float] = {}
         self._firmware: str | None = None
         self._energy_source: str | None = None
@@ -255,7 +254,10 @@ class IdracRedfish(IdracClient):
             try:
                 await step(data)
             except InvalidAuth:
-                raise
+                # The same credentials were just accepted for the system
+                # resource: this is a missing privilege, and asking for new
+                # credentials would not fix it.
+                _LOGGER.debug('%s on %s refused: the account may lack a privilege', step.__name__, self.host)
             except (CannotConnect, RedfishConfig) as err:
                 _LOGGER.debug('%s on %s failed: %s', step.__name__, self.host, err)
         return data
@@ -323,7 +325,11 @@ class IdracRedfish(IdracClient):
             data.alerts = self._alerts
             return
         if self._sel_path is None:
-            self._sel_path = await self._find_sel()
+            try:
+                self._sel_path = await self._find_sel()
+            except InvalidAuth:
+                # This account may not read logs: don't ask again on every poll
+                self._sel_path = ''
             if not self._sel_path:
                 _LOGGER.debug('No readable System Event Log on %s', self.host)
                 return
@@ -479,11 +485,18 @@ class IdracRedfish(IdracClient):
             reader = self._energy_via_data if source == ENERGY_DATA else self._energy_via_sysmgmt
             try:
                 energy = await reader()
-            except (CannotConnect, InvalidAuth, SessionLimit) as err:
-                delay = ENERGY_RETRY_AFTER_REFUSED if isinstance(err, InvalidAuth) else ENERGY_RETRY_AFTER_ERROR
-                self._energy_retry_at[source] = now + delay
-                _LOGGER.debug('Energy via %s on %s failed (%s), next try in %d min',
-                              source, self.host, repr(err), delay // 60)
+            except InvalidAuth:
+                # Typically an account allowed on Redfish but not on the web
+                # GUI. That won't change by itself, and each attempt adds a
+                # failed login to the iDRAC's log, which a SIEM reads as an attack.
+                self._energy_unsupported.add(source)
+                _LOGGER.info('%s refused the %s web login used for the energy counter; not trying again '
+                             'until the integration is reloaded', self.host, source)
+                continue
+            except (CannotConnect, SessionLimit) as err:
+                self._energy_retry_at[source] = now + ENERGY_RETRY_AFTER_ERROR
+                _LOGGER.debug('Energy via %s on %s failed (%r), next try in %d min',
+                              source, self.host, err, ENERGY_RETRY_AFTER_ERROR // 60)
                 continue
             if energy is not None:
                 self._energy_source = source
@@ -516,6 +529,8 @@ class IdracRedfish(IdracClient):
         if login.status == 404:
             self._energy_unsupported.add(ENERGY_SYSMGMT)
             return None
+        if login.status in (401, 403):
+            raise InvalidAuth()
         try:
             auth_result = (await login.json(content_type=None)).get('authResult')
         except ValueError:
