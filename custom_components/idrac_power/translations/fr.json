@@ -1,9 +1,9 @@
 {
-  "title": "Moniteur de puissance iDRAC",
+  "title": "iDRAC Server Monitor",
   "config": {
     "step": {
       "user": {
-        "title": "Moniteur de puissance iDRAC",
+        "title": "iDRAC Server Monitor",
         "description": "Compatible iDRAC 6, 7, 8 et 9. Redfish est utilisé s'il est disponible, sinon l'interface web de l'iDRAC.",
         "data": {
           "host": "Nom d'hôte ou adresse IP de l'iDRAC (sans https://)",
