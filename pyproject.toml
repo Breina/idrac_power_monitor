@@ -1,0 +1,18 @@
+# Tooling only: the integration itself is custom_components/idrac_power, installed by HACS.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 119
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+# IdracClient.close() is a hook clients may override; doing nothing is its default
+ignore = ["B027"]
+
+[tool.ruff.lint.per-file-ignores]
+# Captured iDRAC answers read best unwrapped
+"tests/*" = ["E501"]
