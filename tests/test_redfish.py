@@ -2,59 +2,16 @@
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
 from custom_components.idrac_power.const import DOMAIN
 
-from .conftest import no_event_log
-
-BASE = 'https://10.0.0.2/redfish/v1'
-CHASSIS = f'{BASE}/Chassis/System.Embedded.1'
-
-IDRAC8 = {
-    f'{CHASSIS}': {'Name': 'Computer System Chassis', 'Manufacturer': 'Dell Inc.',
-                   'Model': 'PowerEdge R720', 'SerialNumber': 'CN123', 'Status': {'State': 'Enabled'}},
-    f'{BASE}/Managers/iDRAC.Embedded.1': {'FirmwareVersion': '2.86.86.86'},
-    # Chassis says "Enabled" while the host is off: status must follow PowerState
-    f'{BASE}/Systems/System.Embedded.1': {'PowerState': 'Off', 'Status': {'HealthRollup': 'Warning'}},
-    f'{CHASSIS}/Power': {
-        'PowerControl': [{'PowerConsumedWatts': 112, 'PowerMetrics': {'AverageConsumedWatts': 110}}],
-        'PowerSupplies': [
-            {'MemberId': 'PSU.Slot.1', 'Name': 'PS1 Status', 'Status': {'Health': 'OK', 'State': 'Enabled'}},
-            {'MemberId': 'PSU.Slot.2', 'Name': 'PS2 Status', 'Status': {'Health': 'Critical', 'State': 'Enabled'}},
-            {'MemberId': 'PSU.Slot.3', 'Name': 'PS3 Status', 'Status': {'State': 'Absent'}},
-        ],
-    },
-    f'{CHASSIS}/Thermal': {
-        'Fans': [{'MemberId': '0x17||Fan.Embedded.1A', 'FanName': 'System Board Fan1A', 'Reading': 3480}],
-        'Temperatures': [{'MemberId': 'iDRAC.Embedded.1#CPU1Temp', 'Name': 'CPU1 Temp', 'ReadingCelsius': 41}],
-    },
-}
-
-
-def serve(aioclient_mock: AiohttpClientMocker, resources: dict) -> None:
-    for url, body in resources.items():
-        aioclient_mock.get(url, json=body)
-    no_event_log(aioclient_mock)
-
-
-async def setup(hass: HomeAssistant, data: dict | None = None, entry: MockConfigEntry | None = None) -> MockConfigEntry:
-    if entry is None:
-        entry = MockConfigEntry(domain=DOMAIN, data=data or {
-            'host': '10.0.0.2', 'username': 'root', 'password': 'calvin', 'interval': 300, 'api': 'redfish'})
-        entry.add_to_hass(hass)
-    await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
-    return entry
+from .common import BASE, CHASSIS, IDRAC8, serve, setup
 
 
 async def test_idrac8_entities_keep_1x_unique_ids(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker):
+    # iDRAC 7/8 without the energy counter in Redfish, and /data answering 404
     serve(aioclient_mock, IDRAC8)
-    # iDRAC 7/8 without the energy counter in Redfish: /data answers 404 here
-    aioclient_mock.get('https://10.0.0.2/start.html', status=404)
-    aioclient_mock.post('https://10.0.0.2/data/login', status=404)
-    aioclient_mock.post('https://10.0.0.2/sysmgmt/2015/bmc/session', status=404)
     entry = await setup(hass)
     assert entry.state is ConfigEntryState.LOADED
 
@@ -104,9 +61,7 @@ async def test_idrac9_subsystem_fallback_follows_absolute_odata_ids(
         {'Id': 'PSU.Slot.1', 'Name': 'PSU 1', 'Status': {'Health': 'OK', 'State': 'Enabled'}}]}
     for url in (f'{CHASSIS}/Power', f'{CHASSIS}/Thermal'):
         aioclient_mock.get(url, status=404, text='')
-    for url, body in resources.items():
-        aioclient_mock.get(url, json=body)
-    no_event_log(aioclient_mock)
+    serve(aioclient_mock, resources)
     entry = await setup(hass)
     assert entry.state is ConfigEntryState.LOADED
 
@@ -123,9 +78,6 @@ async def test_idrac9_subsystem_fallback_follows_absolute_odata_ids(
 
 async def test_power_switch_posts_reset(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker):
     serve(aioclient_mock, IDRAC8)
-    aioclient_mock.get('https://10.0.0.2/start.html', status=404)
-    aioclient_mock.post('https://10.0.0.2/data/login', status=404)
-    aioclient_mock.post('https://10.0.0.2/sysmgmt/2015/bmc/session', status=404)
     aioclient_mock.post(f'{BASE}/Systems/System.Embedded.1/Actions/ComputerSystem.Reset', status=204)
     await setup(hass)
 
@@ -138,3 +90,4 @@ async def test_power_switch_posts_reset(hass: HomeAssistant, aioclient_mock: Aio
                                        blocking=True)
         resets = [call for call in aioclient_mock.mock_calls if str(call[1]).endswith('ComputerSystem.Reset')]
         assert resets[-1][2] == {'ResetType': reset_type}
+
