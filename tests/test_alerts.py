@@ -32,7 +32,7 @@ def idrac8(with_psu_watts: bool = True) -> dict:
     resources = dict(IDRAC8)
     power = dict(IDRAC8[f'{CHASSIS}/Power'])
     supplies = []
-    for supply, watts in zip(power['PowerSupplies'], (120, 4, None)):
+    for supply, watts in zip(power['PowerSupplies'], (120, 4, None), strict=True):
         supply = dict(supply)
         if with_psu_watts and watts is not None:
             supply['PowerInputWatts'] = watts
