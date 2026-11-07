@@ -131,3 +131,6 @@ dmypy.json
 # Local dev files
 CLAUDE.md
 TODO.md
+# IDEs
+.idea/
+.vscode/
