@@ -24,4 +24,4 @@ async def test_diagnostics_hide_credentials_and_service_tag(hass: HomeAssistant,
     assert diagnostics['client']['thermal_source'] == 'thermal'
     assert diagnostics['data']['power_watts'] == 112
     assert diagnostics['data']['power_supplies']['PSU.Slot.2'] == {
-        'name': 'PS2 Status', 'healthy': False, 'input_watts': None, 'input_volts': None}
+        'name': 'PS2 Status', 'healthy': False, 'input_watts': None, 'input_volts': None, 'input_amps': None}

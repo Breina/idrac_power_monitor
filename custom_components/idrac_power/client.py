@@ -84,6 +84,8 @@ class PowerSupply:
     input_watts: float | None = None
     # Line input voltage: 0 V when the PSU has lost its feed
     input_volts: float | None = None
+    # Line input current (A); iDRAC 6 reports it for each PSU, and no power
+    input_amps: float | None = None
 
     @property
     def label(self) -> str:

@@ -132,6 +132,27 @@ async def test_idrac6_entities(hass: HomeAssistant, aioclient_mock: AiohttpClien
     assert len(calls(aioclient_mock, '/data/logout')) == 1
 
 
+async def test_psu_input_current(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker):
+    """iDRAC 6 reports each PSU's input current in powermonitordata, 0.1 A steps."""
+    idrac6(aioclient_mock)
+    entry = await setup_idrac6(hass)
+    states = friendly_states(hass)
+    assert states['PowerEdge R910 PS 1 input current'] == '0.5'
+    assert states['PowerEdge R910 PS 2 input current'] == '0.5'
+    registry = er.async_get(hass)
+    current = registry.async_get(registry.async_get_entity_id(
+        'sensor', DOMAIN, '17JBYX1_PowerEdge R910_psu_current_PS 1'))
+    assert current.entity_category is er.EntityCategory.DIAGNOSTIC
+    assert entry.runtime_data.data.power_supplies['PS 1'].input_amps == 0.5
+
+
+async def test_no_psu_current_while_the_host_is_off(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker):
+    """The iDRAC answers "powerOff" instead of a current: no reading, not a zero."""
+    idrac6(aioclient_mock, poll='idrac6_poll_r710_off_psu_unknown.xml')
+    await setup_idrac6(hass)
+    assert not [name for name in friendly_states(hass) if 'input current' in name]
+
+
 async def test_lost_psu_input_is_a_problem(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker):
     idrac6(aioclient_mock, poll='idrac6_poll_psu_lost.xml')
     await setup_idrac6(hass)

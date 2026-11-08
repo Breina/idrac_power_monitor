@@ -13,6 +13,8 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.const import (
     REVOLUTIONS_PER_MINUTE,
+    EntityCategory,
+    UnitOfElectricCurrent,
     UnitOfElectricPotential,
     UnitOfEnergy,
     UnitOfPower,
@@ -111,6 +113,20 @@ ITEM_SENSORS = (
         name_fn=lambda psu: f'{psu.label} input voltage',
         value_fn=lambda psu: psu.input_volts,
         exists_fn=lambda psu: psu.input_volts is not None,
+    ),
+    # What iDRAC 6 measures for each PSU, in place of its power (the iDRAC 6 only
+    # reports the whole server's)
+    IdracItemSensorDescription(
+        key='psu_current',
+        icon='mdi:current-ac',
+        entity_category=EntityCategory.DIAGNOSTIC,
+        native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+        device_class=SensorDeviceClass.CURRENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        items_fn=lambda data: data.power_supplies,
+        name_fn=lambda psu: f'{psu.label} input current',
+        value_fn=lambda psu: psu.input_amps,
+        exists_fn=lambda psu: psu.input_amps is not None,
     ),
 )
 
