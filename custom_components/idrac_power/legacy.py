@@ -48,6 +48,10 @@ SENSOR_SYSTEM_LEVEL = '3'
 SENSOR_FANS = '4'
 SENSOR_POWER_SUPPLIES = '8'
 
+# powermonitordata/ampReading<n>: input current of PSU n in A (0.1 A steps), shown
+# as "PS n Current" on the iDRAC 6 power page; "powerOff" while the host is off
+AMP_READING = './/powermonitordata/ampReading{}'
+
 # /data?set=pwState:<n> (0 off, 1 on, 2 cycle, 3 reset, 4 NMI, 5 graceful shutdown)
 PW_STATE_ON = 1
 POWER_ACTIONS = {POWER_ON: 1, POWER_GRACEFUL_SHUTDOWN: 5, POWER_FORCE_OFF: 0, POWER_FORCE_RESTART: 3}
@@ -209,6 +213,13 @@ class IdracLegacy(IdracClient):
             _LOGGER.debug('Logout from %s failed: %s', self.host, err)
 
 
+def _input_amps(root: ET.Element, name: str) -> float | None:
+    """Input current of the PSU called "PS 2", from the power monitor data."""
+    number = re.search(r'\d+', name)
+    reading = root.find(AMP_READING.format(number.group())) if number else None
+    return _number(reading.text) if reading is not None else None
+
+
 def parse_poll(root: ET.Element) -> IdracData:
     """Turn a /data?get=POLL_KEYS answer into IdracData."""
     data = IdracData()
@@ -232,7 +243,8 @@ def parse_poll(root: ET.Element) -> IdracData:
                 # iDRAC 6 names PSUs by <location>, iDRAC 7/8 by <name>
                 name = _text(sensor, 'name') or _text(sensor, 'location')
                 if name:
-                    data.power_supplies[name] = PowerSupply(name, _status_ok(sensor))
+                    data.power_supplies[name] = PowerSupply(name, _status_ok(sensor),
+                                                            input_amps=_input_amps(root, name))
                 continue
             name = _text(sensor, 'name')
             if not name:
