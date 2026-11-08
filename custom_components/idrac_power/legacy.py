@@ -7,9 +7,13 @@ HTTP API it offers; it needs no dependency beyond aiohttp.
 from __future__ import annotations
 
 import asyncio
+import csv
+import io
 import logging
 import re
+import time
 import xml.etree.ElementTree as ET
+from datetime import UTC, datetime
 
 import aiohttp
 
@@ -19,6 +23,7 @@ from .client import (
     POWER_GRACEFUL_SHUTDOWN,
     POWER_ON,
     REQUEST_TIMEOUT,
+    Alert,
     CannotConnect,
     IdracClient,
     IdracData,
@@ -37,6 +42,14 @@ START_PAGE = '/start.html'
 LOGIN = '/data/login'
 LOGOUT = '/data/logout'
 DATA = '/data'
+# The GUI's "Save As" link on the System Event Log page. Despite its name it
+# answers CSV or XML depending on the session, so both are parsed.
+EVENT_LOG = '/csvdata'
+EVENT_LOG_KEY = 'eventLogEntriesCSV'
+# The log is a slow page on a slow controller: no need to read it every poll
+EVENT_LOG_MIN_INTERVAL = 60
+# The iDRAC clock runs in UTC; records written before it is set say "System Boot"
+EVENT_TIME_FORMAT = '%a %b %d %Y %H:%M:%S'
 
 INFO_KEYS = 'sysDesc,svcTag,hostName,fwVersion'
 POLL_KEYS = 'pwState,systemLevel,powermonitordata,temperatures,fans,voltages,powerSupplies'
@@ -104,6 +117,8 @@ class IdracLegacy(IdracClient):
         self.missing = False
         # One session, reused across polls: an iDRAC 6 only has a handful of them
         self._lock = asyncio.Lock()
+        self._alerts: list[Alert] | None = None
+        self._alerts_read_at = 0.0
 
     async def _request(self, method: str, path: str, **kwargs) -> aiohttp.ClientResponse:
         try:
@@ -185,7 +200,44 @@ class IdracLegacy(IdracClient):
         )
 
     async def fetch(self) -> IdracData:
-        return parse_poll(await self._query({'get': POLL_KEYS}))
+        data = parse_poll(await self._query({'get': POLL_KEYS}))
+        data.alerts = await self._fetch_alerts()
+        return data
+
+    async def _fetch_alerts(self) -> list[Alert] | None:
+        """The System Event Log, read at most once a minute.
+
+        It is a secondary resource: when it can't be read the last good log is
+        kept, and the sensors still update.
+        """
+        if self._alerts is not None and time.monotonic() - self._alerts_read_at < EVENT_LOG_MIN_INTERVAL:
+            return self._alerts
+        try:
+            alerts = await self._read_event_log()
+        except (CannotConnect, SessionLimit) as err:
+            _LOGGER.debug('No event log from %s: %s', self.host, err)
+            return self._alerts
+        self._alerts = alerts
+        self._alerts_read_at = time.monotonic()
+        return alerts
+
+    async def _read_event_log(self) -> list[Alert]:
+        async with self._lock:
+            for _attempt in (1, 2):
+                if not self._logged_in:
+                    await self._login()
+                response = await self._request('GET', EVENT_LOG, params={'get': EVENT_LOG_KEY},
+                                               headers=self._headers())
+                text = await response.text()
+                if response.status == 200 and '<html' not in text.lower():
+                    alerts = parse_event_log(text)
+                    # Never empty: clearing the log writes a "Log cleared" record
+                    if not alerts:
+                        raise CannotConnect(f'{self.host} answered its event log request with something else')
+                    return alerts
+                _LOGGER.debug('Event log of %s refused (HTTP %s), logging in again', self.host, response.status)
+                self._logged_in = False
+            raise CannotConnect(f'{self.host} keeps refusing its event log')
 
     async def fetch_energy(self) -> float | None:
         """Cumulative energy only; used by the Redfish client on iDRAC 7/8."""
@@ -266,3 +318,51 @@ def _check_answers(root: ET.Element, params: dict[str, str], host: str) -> None:
     if wanted and root.find(f'.//{wanted}') is None and _text(root, 'status') != 'fail':
         raise CannotConnect(f'{host} answered with data for another request (expected <{wanted}>): '
                             'its web server is out of step, reset the iDRAC')
+
+
+def _event_time(value: str | None) -> str:
+    """ISO time of a log record; empty for "System Boot", written before the clock was set."""
+    try:
+        return datetime.strptime((value or '').strip(), EVENT_TIME_FORMAT).replace(tzinfo=UTC).isoformat()
+    except ValueError:
+        return ''
+
+
+def _severity(value: str | None) -> str:
+    """The iDRAC 6 says Normal, Warning or Critical; Alert uses the Redfish OK, Warning, Critical."""
+    value = (value or '').strip().capitalize()
+    return value if value in ('Warning', 'Critical') else 'OK'
+
+
+def parse_event_log(text: str) -> list[Alert]:
+    """Parse the System Event Log export, oldest record first.
+
+    The same URL answers either XML (<eventLogEntry> with severity, dateTime
+    and description) or CSV lines ("Critical","Mon Sep 28 2026 07:28:16",
+    "Fault detected on Drive 0.").
+
+    Records have no id. Two records with the same time and message get a
+    counter, so every record has a key that doesn't change from one poll to
+    the next (or when older records scroll out of the log).
+    """
+    text = text.strip()
+    if text.startswith('<'):
+        try:
+            root = ET.fromstring(text)
+        except ET.ParseError:
+            return []
+        records = [(_text(entry, 'severity'), _text(entry, 'dateTime'), _text(entry, 'description'))
+                   for entry in root.iter('eventLogEntry')]
+    else:
+        records = [(row[0], row[1], row[2]) for row in csv.reader(io.StringIO(text)) if len(row) >= 3]
+    alerts = []
+    seen: dict[tuple[str, str], int] = {}
+    for severity, time_text, message in records:
+        message = (message or '').strip()
+        created = _event_time(time_text)
+        if not message:
+            continue
+        count = seen[created, message] = seen.get((created, message), 0) + 1
+        alerts.append(Alert(id=f'{message}#{count}', created=created, severity=_severity(severity),
+                            message=message))
+    return alerts

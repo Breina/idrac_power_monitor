@@ -1,0 +1,10 @@
+<root><eventLogEntries><eventLogEntry><severity>Normal</severity>
+<dateTime>System Boot</dateTime>
+<dateTimeOrder>System Boot</dateTimeOrder>
+<description>Log cleared.</description>
+</eventLogEntry><eventLogEntry><severity>Critical</severity>
+<dateTime>System Boot</dateTime>
+<dateTimeOrder>System Boot</dateTimeOrder>
+<description>The power input for power supply 2 is lost.</description>
+</eventLogEntry></eventLogEntries><status>ok</status>
+</root>

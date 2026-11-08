@@ -8,7 +8,7 @@ Monitor and control Dell PowerEdge servers from Home Assistant through their iDR
 - Power usage (W) and cumulative energy consumption (kWh, usable in the Energy dashboard)
 - Temperatures and fan speeds
 - Hardware health and per power supply health (problem sensors, e.g. to shut down when a PSU loses input)
-- Alerts: every new entry in the iDRAC's System Event Log fires the **Alert** event entity (`critical`, `warning` or `ok`, with the message), and the latest warning shows on the hardware health sensor (Redfish: iDRAC 7/8/9)
+- Alerts: every new entry in the iDRAC's System Event Log fires the **Alert** event entity (`critical`, `warning` or `ok`, with the message), and the latest warning shows on the hardware health sensor (iDRAC 6 to 9)
 - Input power and input voltage per power supply, when the iDRAC reports them: with each PSU on its own feed, what each feed supplies and which feeds are live
 
 No extra Python dependency: everything goes through the iDRAC's own HTTPS APIs.
