@@ -271,6 +271,8 @@ class IdracRedfish(IdracClient):
             if (energy := as_number(metrics.get('EnergyConsumedKWh'))) is not None:
                 data.energy_kwh = energy
             supplies = power.get('PowerSupplies') or []
+            if redundancy := (power.get('Redundancy') or [None])[0]:
+                data.psu_redundancy_ok = health_ok(redundancy.get('Status'))
         else:
             metrics = await self.get_json(ENVIRONMENT_METRICS) or {}
             data.power_watts = as_number((metrics.get('PowerWatts') or {}).get('Reading'))

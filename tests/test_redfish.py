@@ -151,3 +151,22 @@ async def test_failing_energy_source_is_tried_again_later(hass: HomeAssistant, a
     entry = await setup(hass)
     await entry.runtime_data.async_refresh()
     assert logins(aioclient_mock) == 2
+
+
+async def test_psu_redundancy_follows_the_power_resource(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker):
+    resources = dict(IDRAC8)
+    power = dict(IDRAC8[f'{CHASSIS}/Power'])
+    power['Redundancy'] = [{'Name': 'System Board PS Redundancy', 'Status': {'Health': 'Critical', 'State': 'Enabled'}}]
+    resources[f'{CHASSIS}/Power'] = power
+    serve(aioclient_mock, resources)
+    await setup(hass)
+
+    entity_id = er.async_get(hass).async_get_entity_id('binary_sensor', DOMAIN, 'CN123_PowerEdge R720_psu_redundancy')
+    assert hass.states.get(entity_id).state == 'on'  # problem
+
+
+async def test_no_redundancy_sensor_when_the_idrac_reports_none(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker):
+    serve(aioclient_mock, IDRAC8)
+    await setup(hass)
+    assert er.async_get(hass).async_get_entity_id(
+        'binary_sensor', DOMAIN, 'CN123_PowerEdge R720_psu_redundancy') is None

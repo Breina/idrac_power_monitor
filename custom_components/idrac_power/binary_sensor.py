@@ -70,6 +70,14 @@ BINARY_SENSORS = (
         exists_fn=lambda data: data.health_ok is not None,
         attributes_fn=health_attributes,
     ),
+    # On when the server would not survive losing a power supply
+    IdracBinarySensorDescription(
+        key='psu_redundancy',
+        name='PSU redundancy',
+        device_class=BinarySensorDeviceClass.PROBLEM,
+        value_fn=lambda data: problem(data.psu_redundancy_ok),
+        exists_fn=lambda data: data.psu_redundancy_ok is not None,
+    ),
 )
 
 ITEM_BINARY_SENSORS = (

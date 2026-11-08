@@ -101,6 +101,8 @@ class IdracData:
     fans: dict[str, Reading] = field(default_factory=dict)
     temperatures: dict[str, Reading] = field(default_factory=dict)
     power_supplies: dict[str, PowerSupply] = field(default_factory=dict)
+    # Whether the power supplies are redundant (the server survives losing one); None when not reported
+    psu_redundancy_ok: bool | None = None
     # System Event Log, oldest first; None when this iDRAC's log can't be read
     alerts: list[Alert] | None = None
 

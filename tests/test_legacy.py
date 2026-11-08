@@ -197,6 +197,19 @@ async def test_powered_off_psus_are_unknown_not_a_problem(hass: HomeAssistant, a
     assert states['PowerEdge R910 PS 2'] == 'unknown'
     # Nothing known yet: no health sensor rather than a false alarm
     assert states.get('PowerEdge R910 Hardware health') != 'on'
+    # The redundancy sensor listed with the PSUs is not a PSU
+    assert not [name for name in states if 'redundancydancy' in name]
+    # Powered off, its status is Unknown: no redundancy sensor yet
+    assert 'PowerEdge R910 PSU redundancy' not in states
+
+
+async def test_lost_redundancy_is_a_problem(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker):
+    """The redundancy sensor says whether a PSU could be lost; it is not a PSU itself."""
+    idrac6(aioclient_mock, poll='idrac6_poll_redundancy_lost.xml')
+    await setup_idrac6(hass)
+    states = friendly_states(hass)
+    assert states['PowerEdge R910 PSU redundancy'] == 'on'
+    assert not [name for name in states if 'redundancydancy' in name]
 
 
 async def test_answer_to_another_request_is_rejected(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker):
