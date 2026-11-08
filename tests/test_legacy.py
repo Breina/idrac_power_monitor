@@ -1,4 +1,5 @@
 """iDRAC 6 through the web GUI /data API."""
+from datetime import UTC, datetime
 from pathlib import Path
 
 from homeassistant import config_entries
@@ -11,7 +12,7 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClien
 from yarl import URL
 
 from custom_components.idrac_power.const import DOMAIN
-from custom_components.idrac_power.legacy import INFO_KEYS, POLL_KEYS, escape_credential
+from custom_components.idrac_power.legacy import INFO_KEYS, POLL_KEYS, escape_credential, parse_event_log
 
 FIXTURES = Path(__file__).parent / 'fixtures'
 IDRAC = 'https://10.0.0.6'
@@ -22,7 +23,7 @@ def fixture(name: str) -> str:
 
 
 def idrac6(aioclient_mock: AiohttpClientMocker, login: str | None = None,
-           poll: str = 'idrac6_poll_r510_on.xml') -> None:
+           poll: str = 'idrac6_poll_r510_on.xml', sel: str | None = None) -> None:
     # iDRAC 6 has no Redfish
     aioclient_mock.get(f'{IDRAC}/redfish/v1/Chassis/System.Embedded.1', status=404, text='<html>not found</html>')
     aioclient_mock.get(f'{IDRAC}/start.html', text='<html></html>')
@@ -31,6 +32,7 @@ def idrac6(aioclient_mock: AiohttpClientMocker, login: str | None = None,
     aioclient_mock.post(f'{IDRAC}/data?get={POLL_KEYS}', text=fixture(poll))
     for code in (0, 3, 5):
         aioclient_mock.post(f'{IDRAC}/data?set=pwState:{code}', text='<root><status>ok</status></root>')
+    aioclient_mock.get(f'{IDRAC}/csvdata?get=eventLogEntriesCSV', text=sel or fixture('idrac6_sel_r710.csv'))
     aioclient_mock.get(f'{IDRAC}/data/logout', text='')
 
 
@@ -212,3 +214,71 @@ async def test_answer_to_another_request_is_rejected(hass: HomeAssistant, aiocli
     await hass.async_block_till_done()
     assert not entry.runtime_data.last_update_success
     assert friendly_states(hass)['PowerEdge R910 Server status'] == 'unavailable'
+
+
+def test_event_log_parses_both_answers():
+    """The same /csvdata URL answers CSV or XML; the XML has no usable time."""
+    csv_log = parse_event_log(fixture('idrac6_sel_r710.csv'))
+    assert [(a.severity, a.message) for a in csv_log] == [('OK', 'Log cleared.'),
+                                                          ('Critical', 'Fault detected on Drive 0.')]
+    assert csv_log[1].created == datetime(2026, 9, 28, 7, 28, 16, tzinfo=UTC).isoformat()
+
+    xml_log = parse_event_log(fixture('idrac6_sel_r710.xml'))
+    assert [(a.severity, a.message) for a in xml_log] == [
+        ('OK', 'Log cleared.'), ('Critical', 'The power input for power supply 2 is lost.')]
+    assert xml_log[1].created == ''
+
+
+def test_identical_records_have_distinct_stable_keys():
+    line = '"Warning","Mon Sep 28 2026 07:28:16","Fan 3 RPM is less than the lower warning threshold."\n'
+    log = parse_event_log(line * 2)
+    assert len({alert.key for alert in log}) == 2
+    # Older records scrolling out of the log don't renumber the newer ones
+    assert parse_event_log(line * 2)[1].key == log[1].key
+    assert parse_event_log(line)[0].key == log[0].key
+
+
+async def test_event_log_feeds_the_alert_entity_and_health(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker):
+    idrac6(aioclient_mock)
+    entry = await setup_idrac6(hass)
+
+    alert = er.async_get(hass).async_get_entity_id('event', DOMAIN, '17JBYX1_PowerEdge R910_alert')
+    assert alert is not None
+    # What the log held when the server was added is history, not news
+    assert hass.states.get(alert).state == 'unknown'
+    health = hass.states.get('binary_sensor.poweredge_r910_hardware_health')
+    assert health.attributes['active_problems'] == ['Critical: Fault detected on Drive 0.']
+
+    aioclient_mock.clear_requests()
+    idrac6(aioclient_mock, sel=fixture('idrac6_sel_r710.csv')
+           + '"Warning","Tue Sep 29 2026 08:00:00","Fan 3 RPM is less than the lower warning threshold."\n')
+    # The log is read at most once a minute
+    entry.runtime_data.client._alerts_read_at = 0
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    state = hass.states.get(alert)
+    assert state.attributes['event_type'] == 'warning'
+    assert state.attributes['message'].startswith('Fan 3')
+
+
+async def test_event_log_is_read_once_a_minute(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker):
+    idrac6(aioclient_mock)
+    entry = await setup_idrac6(hass)
+    await entry.runtime_data.async_refresh()
+    assert len(calls(aioclient_mock, '/csvdata')) == 1
+
+
+async def test_unreadable_event_log_keeps_the_sensors_and_the_last_log(hass: HomeAssistant,
+                                                                       aioclient_mock: AiohttpClientMocker):
+    idrac6(aioclient_mock)
+    entry = await setup_idrac6(hass)
+    # The page answers a login form: not a log, and never an empty one
+    aioclient_mock.clear_requests()
+    idrac6(aioclient_mock, sel='<html><body>login</body></html>')
+    entry.runtime_data.client._alerts_read_at = 0
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    assert entry.runtime_data.last_update_success
+    health = hass.states.get('binary_sensor.poweredge_r910_hardware_health')
+    assert health.attributes['active_problems'] == ['Critical: Fault detected on Drive 0.']
+    assert friendly_states(hass)['PowerEdge R910 Power usage'] == '224'
