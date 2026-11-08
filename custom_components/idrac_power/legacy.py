@@ -209,6 +209,14 @@ class IdracLegacy(IdracClient):
             _LOGGER.debug('Logout from %s failed: %s', self.host, err)
 
 
+def _is_redundancy(name: str) -> bool:
+    """The PSU list also holds the redundancy sensor, which is not a PSU.
+
+    iDRAC 6 firmware 2.92 itself calls it "system board PS redundancydancy".
+    """
+    return 'redundan' in name.lower()
+
+
 def parse_poll(root: ET.Element) -> IdracData:
     """Turn a /data?get=POLL_KEYS answer into IdracData."""
     data = IdracData()
@@ -231,7 +239,9 @@ def parse_poll(root: ET.Element) -> IdracData:
             if kind == SENSOR_POWER_SUPPLIES:
                 # iDRAC 6 names PSUs by <location>, iDRAC 7/8 by <name>
                 name = _text(sensor, 'name') or _text(sensor, 'location')
-                if name:
+                if name and _is_redundancy(name):
+                    data.psu_redundancy_ok = _status_ok(sensor)
+                elif name:
                     data.power_supplies[name] = PowerSupply(name, _status_ok(sensor))
                 continue
             name = _text(sensor, 'name')
